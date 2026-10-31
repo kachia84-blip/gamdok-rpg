@@ -1,0 +1,14 @@
+{
+  "id": "./",
+  "name": "신입 감독관 RPG",
+  "short_name": "감독관 RPG",
+  "description": "현장을 살피고 근거로 설득하는 텍스트 RPG입니다.",
+  "lang": "ko",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#eceee8",
+  "theme_color": "#205c48",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

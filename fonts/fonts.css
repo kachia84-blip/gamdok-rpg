@@ -1,0 +1,5 @@
+/* 프리텐다드(Pretendard, SIL OFL 1.1, https://github.com/orioncactus/pretendard)와 토스페이스(Tossface, https://github.com/toss/tossface) — 앱에서 쓰는 글자만 남긴 조각. tools/fonts_sub.py 가 만듦 */
+@font-face{font-family:"Pretendard";src:url("pretendard.woff2") format("woff2");font-weight:45 920;font-display:swap}
+@font-face{font-family:"Tossface";src:url("tf01.woff2") format("woff2");font-display:swap;unicode-range:U+1F9D3, U+FE0F, U+200D}
+@font-face{font-family:"Tossface";src:url("tf08.woff2") format("woff2");font-display:swap;unicode-range:U+2705, U+1F69C, U+FE0F, U+200D}
+@font-face{font-family:"Tossface";src:url("tf09.woff2") format("woff2");font-display:swap;unicode-range:U+2699, U+26A0, U+26D1, U+1F396, U+1F4C1, U+1F4CB, U+1F4CC, U+1F4CF, U+1F4D6, U+1F4DA, U+1F4F7, U+1F573, U+1FA9C, U+FE0F, U+200D}
