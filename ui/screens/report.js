@@ -3,7 +3,7 @@ import { hotspotText } from './scene.js';
 import { FIELDS } from '../../core/fields.js';
 import { ITEMS } from '../../core/items.js';
 
-export function report({ site, result, onHome, onArticle }) {
+export function report({ site, result, run, onNext, onArticle }) {
   const labels = { find: '위반 발견', cite: '조문 선택', law: '법 근거', rebut: '반박 설득', falseMark: '잘못된 지적', missed: '놓친 위반' };
   const violation = id => site.violations.find(v => v.id === id);
   const progress = result.progress;
@@ -11,6 +11,8 @@ export function report({ site, result, onHome, onArticle }) {
     h('article', { className: 'paper report' }, h('p', { className: 'eyebrow' }, site.title),
       h('div', { className: 'grade', 'aria-label': `${result.grade}등급` }, result.grade),
       h('h2', {}, `${result.points}점 · 획득 ${Math.max(0, result.points)} XP`),
+      h('p', { className: 'trust' }, `신뢰도 ${run.trust}/100`),
+      result.waivedFalseMark && h('p', {}, '🦺 첫 함정 지적을 무효로 처리했습니다.'),
       progress?.rankUp && h('p', { className: 'celebration', role: 'status' }, `🎖️ ${progress.rankUp} 승진을 축하드립니다!`),
       progress?.fieldUps.map(field => h('p', { className: 'celebration' }, `🎖️ ${field.name} Lv${field.level} 달성을 축하드립니다!`)),
       progress && h('section', { className: 'progress-summary' }, h('h2', {}, '분야 숙련도'),
@@ -42,5 +44,5 @@ export function report({ site, result, onHome, onArticle }) {
       h('h2', {}, `잘못 지적하신 사항 ${result.falseMarks.length}건`), result.falseMarks.map(id => h('div', { className: 'report-item' },
         h('p', { className: 'quote' }, hotspotText(site, id)), h('p', {}, site.hotspots[id].why))),
       h('p', { className: 'muted' }, '틀리거나 놓치신 내용은 오답 노트에 담았습니다.')),
-    button('사무실로', onHome, { className: 'primary full' }));
+    button(run.phase === 'failed' ? '런 결과' : '보상 선택', onNext, { className: 'primary full' }));
 }

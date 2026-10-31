@@ -12,8 +12,15 @@ function update(st, patch) {
   return stateWithLimit({ ...st, ...patch }, st[markLimit]);
 }
 
-export function startInspection(site) {
-  return stateWithLimit({ siteId: site.id, marks: [], phase: 'scene', queue: [], cur: 0, answers: {} }, site.violations.length + 1);
+export function startInspection(site, relics = []) {
+  return stateWithLimit({ siteId: site.id, marks: [], phase: 'scene', queue: [], cur: 0, answers: {},
+    ...(relics.includes('light') ? { extraMarks: 1 } : {}),
+    ...(relics.includes('books') ? { freePeek: true } : {}),
+  }, site.violations.length + 1);
+}
+
+export function restoreInspection(st, site) {
+  return stateWithLimit({ ...st }, site.violations.length + 1);
 }
 
 export function canMark(st, site) {
@@ -133,5 +140,8 @@ export function buildReport(st, site) {
   const maximum = site.violations.length * (POINTS.find + POINTS.cite + POINTS.law + POINTS.rebut);
   const ratio = maximum ? Math.max(0, points) / maximum : 0;
   const grade = ratio >= 0.95 ? 'S' : ratio >= 0.8 ? 'A' : ratio >= 0.6 ? 'B' : 'C';
-  return { found, missed, falseMarks, perViolation, points, breakdown, grade, usedItems: [...(st.usedItems ?? [])] };
+  return { found, missed, falseMarks, perViolation, points, breakdown, grade, usedItems: [...(st.usedItems ?? [])],
+    ...(site.generated ? { placeId: site.placeId, kind: site.kind,
+      numericCorrect: site.violations.filter(v => v.rebuttal.type === 'num' && perViolation[v.id].rebut).length } : {}),
+  };
 }

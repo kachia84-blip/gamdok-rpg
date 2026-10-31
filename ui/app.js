@@ -1,13 +1,18 @@
-import { h, clear, button } from './dom.js';
-import { startInspection, toggleMark, canMark, finishScene, answer, nextStep, current, buildReport, openPeek, useInspectionItem } from '../core/inspect.js';
-import { parseSave, emptySave, applyProgress, isUnlocked } from '../core/save.js';
-import { addWrong, dueCards, markReview } from '../core/review.js';
+﻿import { h, clear, button } from './dom.js';
+import { startInspection, restoreInspection, toggleMark, canMark, finishScene, answer, nextStep, current, buildReport, openPeek, useInspectionItem } from '../core/inspect.js';
+import { parseSave, emptySave, applyProgress } from '../core/save.js';
+import { addWrong, dueCards, markReview, reviewProblem } from '../core/review.js';
 import { judgeCite, judgeLaw, judgeRebut } from '../core/judge.js';
 import { peekFree } from '../core/fields.js';
 import { ITEMS, itemRewards, useItem, grantItems } from '../core/items.js';
+import { makeRng } from '../core/rng.js';
+import { startRun, makeRunSite, afterSite, resolveReport, rewardChoices, takeReward, bestRun } from '../core/run.js';
 import { home } from './screens/home.js';
-import { briefing } from './screens/briefing.js';
-import { scene, hotspotText } from './screens/scene.js';
+import { hotspotText } from './screens/scene.js';
+import { runStart } from './screens/run-start.js';
+import { runScene } from './screens/run-scene.js';
+import { reward } from './screens/reward.js';
+import { runResult } from './screens/run-result.js';
 import { cite } from './screens/cite.js';
 import { rebut } from './screens/rebut.js';
 import { report } from './screens/report.js';
@@ -19,25 +24,27 @@ const STORAGE_KEY = 'gamdok_rpg_v1';
 const root = document.querySelector('#app');
 const status = document.querySelector('#status');
 let save = emptySave();
-let sites = [];
+let cards = [];
+let places = [];
 let articles = {};
+let sites = [];
+let run = null;
 let page = 'home';
 let site;
 let st;
-let sceneIndex = 0;
-let tapeArmed = false;
 let result;
+let tapeArmed = false;
 let reviewCards = [];
 let reviewAnswer;
 let reviewAnswered = false;
 let completed = 0;
 let storageFailed = false;
 
-function announce(message) {
-  status.textContent = message;
-}
+function announce(message) { status.textContent = message; }
 
 function persist() {
+  if (run) run = { ...run, site, inspection: st, result, page };
+  save = { ...save, run };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
     storageFailed = false;
@@ -49,7 +56,32 @@ function persist() {
 
 function navigate(next) {
   page = next;
+  persist();
   render();
+}
+
+function resumePage() {
+  if (!run) return 'home';
+  if (run.phase === 'won') return 'run-result';
+  if (run.phase === 'failed') return result && run.page === 'report' ? 'report' : 'run-result';
+  if (run.phase === 'reward') return result && run.page === 'report' ? 'report' : 'reward';
+  if (!site || !st) return 'run-start';
+  return st.phase === 'scene' ? 'scene' : st.phase === 'rebut' ? 'rebut' : 'cite';
+}
+
+function dispatch() {
+  if (run) { navigate(resumePage()); return; }
+  run = startRun(crypto.getRandomValues(new Uint32Array(1))[0]);
+  site = st = result = undefined;
+  navigate('run-start');
+}
+
+function enterSite() {
+  site = makeRunSite(run, cards, places, articles);
+  st = startInspection(site, run.relics);
+  result = undefined;
+  tapeArmed = false;
+  navigate('scene');
 }
 
 function showArticle(articleNo) {
@@ -59,6 +91,7 @@ function showArticle(articleNo) {
     if (pos?.step === 'cite' && !Object.hasOwn(st.answers[pos.vid] ?? {}, 'cite')) {
       const v = site.violations.find(v => v.id === pos.vid);
       st = openPeek(st, pos.vid, peekFree(save, v.article));
+      persist();
     }
   }
   const dialog = article({ articleNo, articles });
@@ -76,20 +109,41 @@ function playDay(now) {
 }
 
 function saveReport() {
-  result = buildReport(st, site);
+  if (run.phase !== 'site') return;
+  result = resolveReport(run, buildReport(st, site));
   const now = Date.now();
-  const outcome = applyProgress(save, site, result, playDay(now), Math.random);
+  const outcome = applyProgress(save, site, result, playDay(now), makeRng(`${run.seed}:meta:${run.day}`));
   save = outcome.save;
   result = { ...result, progress: outcome.progress };
   const add = (vid, step) => {
-    save = { ...save, review: addWrong(save.review, { key: `${site.id}:${vid}:${step}`, siteId: site.id, vid, step }, now) };
+    const v = site.violations.find(v => v.id === vid);
+    // Separate different observed values while preserving the existing review key format.
+    const siteId = `${site.id}-${v.cardId}-${String(v.v ?? 'text').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    save = { ...save, review: addWrong(save.review, {
+      key: `${siteId}:${vid}:${step}`, siteId, vid, step, cardId: v.cardId, v: v.v,
+      snapshot: { violation: v, text: hotspotText(site, vid) },
+    }, now) };
   };
   for (const vid of result.missed) add(vid, 'cite');
   for (const vid of result.found) for (const step of ['cite', 'law', 'rebut']) {
     if (!result.perViolation[vid][step]) add(vid, step);
   }
-  persist();
+  run = afterSite(run, result);
+  if (run.phase === 'reward') run = { ...run, choices: rewardChoices(run, makeRng(`${run.seed}:reward:${run.day}`)) };
+  if (run.phase === 'failed') save = { ...save, bestRun: bestRun(save.bestRun, run) };
   navigate('report');
+}
+
+function chooseReward(choice) {
+  const next = takeReward(run, choice);
+  if (next === run) return;
+  if (choice.type === 'item') save = grantItems(save, [choice.id]).save;
+  run = next;
+  site = st = result = undefined;
+  if (run.phase === 'won') {
+    save = { ...save, bestRun: bestRun(save.bestRun, run) };
+    navigate('run-result');
+  } else enterSite();
 }
 
 function useEquipment(id, options = {}) {
@@ -101,11 +155,11 @@ function useEquipment(id, options = {}) {
   }
   const consumed = useItem(save, id);
   if (!consumed.ok) return;
-  const next = useInspectionItem(st, site, id, { sceneId: site.scenes[sceneIndex].id, rng: Math.random, ...options });
-  if (next === st) {
-    announce('이미 확인하셨거나 지금 사용할 수 없는 장비입니다.');
-    return;
-  }
+  const next = useInspectionItem(st, site, id, {
+    sceneId: site.scenes[0].id,
+    rng: makeRng(`${run.seed}:item:${run.day}:${st.usedItems?.length ?? 0}`), ...options,
+  });
+  if (next === st) { announce('지금은 이 장비를 사용하실 수 없습니다.'); return; }
   st = next;
   save = consumed.save;
   tapeArmed = false;
@@ -117,6 +171,7 @@ function submit(value) {
   const pos = current(st);
   if (!pos || Object.hasOwn(st.answers[pos.vid] ?? {}, pos.step)) return;
   st = answer(st, pos.step, pos.vid, value);
+  persist();
   render(false);
   root.querySelector('[data-next]')?.focus();
 }
@@ -140,14 +195,14 @@ function startReview() {
 function nextReview() {
   const card = reviewCards[0];
   if (!card) return;
-  const v = sites.find(s => s.id === card.siteId)?.violations.find(v => v.id === card.vid);
+  const v = reviewProblem(card, sites)?.v;
   if (v && !reviewAnswered) return;
   if (v) {
     const judge = { cite: judgeCite, law: judgeLaw, rebut: judgeRebut }[card.step];
     const correct = judge(v, reviewAnswer);
     save = { ...save, review: markReview(save.review, card.key, correct, Date.now()) };
     if (correct && card.box === 5) {
-      const granted = grantItems(save, itemRewards(null, { graduated: true }, Math.random));
+      const granted = grantItems(save, itemRewards(null, { graduated: true }, makeRng(`${card.key}:${card.due}:graduate`)));
       save = granted.save;
       announce(granted.received.length ? `오답 카드를 졸업하셨습니다. ${ITEMS[granted.received[0]].name} 1개를 받으셨습니다.` : '오답 카드를 졸업하셨습니다. 장비 가방이 가득 찼습니다.');
     }
@@ -161,32 +216,19 @@ function nextReview() {
 }
 
 function render(focus = true) {
-  const common = { save, sites, articles, site, onHome: () => navigate('home'), onArticle: showArticle, onItem: useEquipment };
+  const common = { save, sites, articles, site, run, onHome: () => navigate('home'), onArticle: showArticle, onItem: useEquipment };
   let screen;
-  if (page === 'home') screen = home({ ...common, onReview: startReview, onCodex: () => navigate('codex'), onSite: id => {
-    if (!isUnlocked(save, sites, id)) return;
-    site = sites.find(s => s.id === id);
-    navigate('briefing');
-  } });
-  if (page === 'briefing') screen = briefing({ ...common, onStart: () => {
-    st = startInspection(site);
-    sceneIndex = 0;
-    tapeArmed = false;
-    navigate('scene');
-  } });
+  if (page === 'home') screen = home({ ...common, onReview: startReview, onCodex: () => navigate('codex'), onDispatch: dispatch });
+  if (page === 'run-start') screen = runStart({ run, onStart: enterSite });
   if (page === 'codex') screen = codex(common);
-  if (page === 'scene') screen = scene({ ...common, st, sceneIndex, tapeArmed,
-    onScene: index => { sceneIndex = index; render(false); root.querySelector('[aria-selected="true"]')?.focus(); },
+  if (page === 'scene') screen = runScene({ ...common, st, tapeArmed,
     onMark: id => {
       if (tapeArmed) { useEquipment('tape', { hotspotId: id }); return; }
-      if (!st.marks.includes(id) && !canMark(st, site)) {
-        announce('지적 수가 가득 찼습니다. 기존 표시를 취소해 주세요.');
-        return;
-      }
+      if (!st.marks.includes(id) && !canMark(st, site)) { announce('지적 수가 가득 찼습니다. 기존 표시를 취소해 주세요.'); return; }
       st = toggleMark(st, id);
+      persist();
       render(false);
-      const hotspots = [...root.querySelectorAll('.hotspot')];
-      hotspots.find(el => el.getAttribute('aria-label')?.startsWith(`${hotspotText(site, id)} ·`))?.focus({ preventScroll: true });
+      [...root.querySelectorAll('.hotspot')].find(el => el.getAttribute('aria-label')?.startsWith(`${hotspotText(site, id)} ·`))?.focus({ preventScroll: true });
     },
     onFinish: () => {
       if (st.phase !== 'scene') return;
@@ -199,9 +241,15 @@ function render(focus = true) {
     const { vid, step } = current(st);
     const v = site.violations.find(item => item.id === vid);
     const props = { ...common, st, v, step, quote: hotspotText(site, vid), hasAnswer: Object.hasOwn(st.answers[vid] ?? {}, step), value: st.answers[vid]?.[step], onAnswer: submit, onNext: advance };
-    screen = page === 'rebut' ? rebut(props) : cite(props);
+    screen = h('div', {}, h('p', { className: 'run-status' }, `${run.day}/5일차 · 신뢰도 ${run.trust}`), page === 'rebut' ? rebut(props) : cite(props));
   }
-  if (page === 'report') screen = report({ ...common, result });
+  if (page === 'report') screen = report({ ...common, result, onNext: () => navigate(run.phase === 'failed' ? 'run-result' : 'reward') });
+  if (page === 'reward') screen = reward({ ...common, choices: run.choices, onChoose: chooseReward });
+  if (page === 'run-result') screen = runResult({ ...common, onHome: () => {
+    run = null;
+    site = st = result = undefined;
+    navigate('home');
+  } });
   if (page === 'review') screen = review({ ...common, cards: reviewCards, completed, hasAnswer: reviewAnswered, value: reviewAnswer, onNext: nextReview,
     onAnswer: value => {
       if (reviewAnswered) return;
@@ -213,10 +261,7 @@ function render(focus = true) {
   });
   clear(root);
   root.append(screen);
-  if (focus) {
-    window.scrollTo(0, 0);
-    root.querySelector('h1')?.focus({ preventScroll: true });
-  }
+  if (focus) { window.scrollTo(0, 0); root.querySelector('h1')?.focus({ preventScroll: true }); }
 }
 
 async function loadJSON(path) {
@@ -228,38 +273,28 @@ async function loadJSON(path) {
 async function boot() {
   root.replaceChildren(h('p', { role: 'status' }, '점검 자료를 불러오고 있습니다…'));
   try {
-    const ids = await loadJSON('data/sites.json');
-    if (!Array.isArray(ids) || !ids.length || !ids.every(id => typeof id === 'string' && /^s\d+$/.test(id)) || new Set(ids).size !== ids.length) throw new Error('현장 목록 형식 오류');
-    const [loadedSites, loadedArticles] = await Promise.all([
-      Promise.all(ids.map(async id => {
-        const loaded = await loadJSON(`data/sites/${id}.json`);
-        if (loaded.id !== id || !Number.isInteger(loaded.order) || !loaded.scenes?.length || !Array.isArray(loaded.violations) || !loaded.hotspots) throw new Error('현장 형식 오류');
-        return loaded;
-      })),
-      loadJSON('data/articles.json'),
-    ]);
-    sites = loadedSites.sort((a, b) => a.order - b.order);
-    articles = loadedArticles;
+    [cards, places, articles] = await Promise.all([loadJSON('data/cards.json'), loadJSON('data/places.json'), loadJSON('data/articles.json')]);
     try { save = parseSave(localStorage.getItem(STORAGE_KEY)); } catch {
       announce('저장소에 접근할 수 없습니다. 현재 창에서 진행해 주세요.');
       storageFailed = true;
     }
-    navigate('home');
+    // The codex uses the complete card catalogue, including legacy collected articles.
+    sites = [{ violations: [...cards, ...save.codex.map(article => ({ article }))] }];
+    run = save.run;
+    site = run?.site;
+    st = run?.inspection && site ? restoreInspection(run.inspection, site) : undefined;
+    result = run?.result;
+    navigate(resumePage());
     if ('serviceWorker' in navigator && window.isSecureContext) {
       navigator.serviceWorker.register('sw.js', { scope: './' }).then(registration => {
-        const worker = registration.installing;
         const ready = () => { if (!storageFailed) announce('오프라인 준비를 마쳤습니다. 연결 없이 다시 방문하실 수 있습니다.'); };
         if (registration.active) ready();
-        worker?.addEventListener('statechange', () => {
-          if (worker.state === 'activated') ready();
-          if (worker.state === 'redundant' && !storageFailed) announce('오프라인 자료 저장을 완료하지 못했습니다. 연결된 상태로 다시 방문해 주세요.');
-        });
+        registration.installing?.addEventListener('statechange', event => { if (event.target.state === 'activated') ready(); });
       }).catch(() => { if (!storageFailed) announce('오프라인 준비가 되지 않았습니다. 연결된 상태로 이용해 주세요.'); });
     }
   } catch {
     root.replaceChildren(h('section', {}, h('h1', {}, '자료를 불러오지 못했습니다'),
-      h('p', {}, '현장 자료와 연결 상태를 확인하신 뒤 다시 시도해 주세요.'),
-      button('다시 불러오기', boot, { className: 'primary full' })));
+      h('p', {}, '카드·현장 자료와 연결 상태를 확인하신 뒤 다시 시도해 주세요.'), button('재시도', boot, { className: 'primary full' })));
   }
 }
 

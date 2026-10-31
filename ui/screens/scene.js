@@ -24,24 +24,23 @@ function paragraph(text, st, onMark) {
       },
     }, marked ? '📌 ' : '', label));
     if (st.revealed?.[id]) parts.push(h('small', { className: `measurement ${st.revealed[id] === 'fine' ? 'success' : 'error'}` },
-      st.revealed[id] === 'fine' ? '✅ 기준 충족' : '⚠️ 기준 미달'));
+      st.revealed[id] === 'fine' ? '기준 충족' : '기준 미달'));
     end = match.index + match[0].length;
   }
   parts.push(text.slice(end));
   return h('p', {}, parts);
 }
 
-export function scene({ site, st, save, sceneIndex, onScene, onMark, onFinish, onItem, tapeArmed }) {
-  const place = site.scenes[sceneIndex];
+export function scene({ site, st, save, run, onMark, onFinish, onItem, tapeArmed }) {
+  const place = site.scenes[0];
   return h('section', { className: 'scene-screen' }, heading('현장 점검 중입니다', site.title),
-    h('div', { className: 'tabs', role: 'tablist', 'aria-label': '점검 장소' }, site.scenes.map((s, i) =>
-      button(s.name, () => onScene(i), { id: `tab-${s.id}`, role: 'tab', 'aria-selected': String(i === sceneIndex), 'aria-controls': 'scene-panel', className: i === sceneIndex ? 'active' : '' }))),
-    h('article', { id: 'scene-panel', role: 'tabpanel', 'aria-labelledby': `tab-${place.id}`, className: 'scene-text' },
-      h('h2', {}, place.name), place.paras.map(p => paragraph(p, st, onMark))),
+    h('div', { className: 'site-intro' }, site.briefing.map(text => h('p', {}, text))),
+    h('article', { className: 'scene-text', 'aria-label': place.name }, place.paras.map(p => paragraph(p, st, onMark))),
     tapeArmed && h('p', { role: 'status', className: 'notice' }, '기준을 잴 구절을 골라 주세요. 줄자를 다시 누르면 취소하실 수 있습니다.'),
     Object.hasOwn(st.checks ?? {}, place.id) && h('p', { role: 'status' }, `📋 이 장소의 위반은 ${st.checks[place.id]}개입니다.`),
     !canMark(st, site) && h('p', { role: 'status', className: 'notice' }, '지적 수가 가득 찼습니다. 기존 지적을 취소하면 더 표시하실 수 있습니다.'),
     h('div', { className: 'bottom-bar' },
+      h('span', { className: 'trust', role: 'status' }, `신뢰도 ${run.trust}`),
       h('div', { className: 'equipment', role: 'group', 'aria-label': '점검 장비' }, ['tape', 'checklist', 'camera'].map(id => {
         const item = ITEMS[id];
         return button(`${item.emoji} ${save.items[id]}`, () => onItem(id), {

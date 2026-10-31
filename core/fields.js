@@ -1,10 +1,12 @@
 export const FIELDS = Object.freeze([
-  { id: 'fall', name: '추락', emoji: '🪜', articles: ['제13조', '제42조', '제43조', '제56조'] },
+  { id: 'fall', name: '추락·통로', emoji: '🪜', articles: ['제13조', '제14조', '제22조', '제23조', '제24조', '제27조', '제28조', '제42조', '제43조', '제44조', '제56조', '제62조', '제63조', '제67조', '제68조'] },
   { id: 'ppe', name: '보호구', emoji: '⛑️', articles: ['제32조'] },
   { id: 'machine', name: '기계', emoji: '⚙️', articles: ['제87조', '제103조', '제104조'] },
-  { id: 'lift', name: '운반기계', emoji: '🚜', articles: ['제179조', '제180조'] },
-  { id: 'ground', name: '굴착·붕괴', emoji: '🕳️', articles: ['제38조', '제339조', '제340조', '제347조'] },
-  { id: 'etc', name: '기타', emoji: '📁', articles: [] },
+  { id: 'lift', name: '운반·양중', emoji: '🚜', articles: ['제20조', '제133조', '제134조', '제179조', '제180조'] },
+  { id: 'ground', name: '굴착·붕괴', emoji: '🕳️', articles: ['제38조', '제339조', '제340조', '제344조', '제347조'] },
+  { id: 'elec', name: '전기', emoji: '⚡', articles: ['제301조', '제302조', '제304조'] },
+  { id: 'confined', name: '밀폐공간', emoji: '🫁', articles: ['제618조', '제620조', '제621조', '제624조', '제625조'] },
+  { id: 'etc', name: '조도·화재 등', emoji: '📁', articles: [] },
 ].map(field => Object.freeze({ ...field, articles: Object.freeze(field.articles) })));
 
 export const FIELD_LEVELS = Object.freeze([0, 30, 80, 150, 250]);

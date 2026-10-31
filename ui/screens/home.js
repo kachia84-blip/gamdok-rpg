@@ -1,16 +1,18 @@
 import { h, button, heading } from '../dom.js';
 import { rankOf } from '../../core/score.js';
-import { isUnlocked } from '../../core/save.js';
 import { dueCards } from '../../core/review.js';
 import { FIELDS, fieldLevel } from '../../core/fields.js';
 import { ITEMS } from '../../core/items.js';
 import { codexView } from '../../core/codex.js';
 
-export function home({ save, sites, articles, onSite, onReview, onCodex }) {
+export function home({ save, sites, articles, onDispatch, onReview, onCodex }) {
   const rank = rankOf(save.xp);
   const due = dueCards(save.review, Date.now()).length;
   const entries = codexView(save.codex, sites, articles);
-  return h('section', {}, heading('신입 감독관 RPG · 맛보기판', '지청 사무실'),
+  return h('section', {}, heading('신입 감독관 RPG', '지청 사무실'),
+    button('출동', onDispatch, { className: 'primary full dispatch' }),
+    save.run && h('p', { className: 'muted' }, `${save.run.day}일차 기록부터 이어서 진행하실 수 있습니다.`),
+    save.bestRun && h('p', { className: 'muted' }, `최고 기록 ${save.bestRun.days}일 · ${save.bestRun.score}점${save.bestRun.won ? ' · 5일 완주' : ''}`),
     h('div', { className: 'rank-card' }, h('p', { className: 'eyebrow' }, '오늘도 안전한 현장을 만들어 주세요.'),
       h('h2', {}, rank.name), h('p', {}, `${save.xp} XP`),
       h('progress', { max: 1, value: rank.progress, 'aria-label': '다음 계급까지의 경험치' }),
@@ -24,16 +26,6 @@ export function home({ save, sites, articles, onSite, onReview, onCodex }) {
     h('h2', {}, '장비 가방'),
     h('div', { className: 'item-bag' }, Object.entries(ITEMS).map(([id, item]) => h('span', { title: item.desc, 'aria-label': `${item.name} ${save.items[id]}개` }, `${item.emoji}×${save.items[id]}`))),
     button(`조문 도감 ${entries.filter(entry => entry.got).length}/${entries.length}`, onCodex, { className: 'secondary full' }),
-    h('h2', {}, '점검할 현장을 골라 주세요'),
-    sites.map(site => {
-      const unlocked = isUnlocked(save, sites, site.id);
-      const done = save.cleared[site.id];
-      return button([
-        h('span', { className: 'eyebrow' }, `${String(site.order).padStart(2, '0')} · ${site.kind}`),
-        h('strong', {}, site.title), h('small', {}, site.place),
-        h('span', { className: 'site-status' }, !unlocked ? '잠김 · 앞 현장 완료 필요' : done ? `완료 · 최고 ${done.best}등급 · ${done.points}점` : '점검 시작'),
-      ], () => onSite(site.id), { className: 'site-card', disabled: !unlocked });
-    }),
     button(`다시 풀기 · 오늘 ${due}개`, onReview, { className: 'secondary full' }),
     h('p', { className: 'muted' }, '현장과 사고 소식은 학습을 위한 가상 사례입니다. 진행 상황은 이 기기에 저장됩니다.'));
 }

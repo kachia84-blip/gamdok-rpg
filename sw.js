@@ -1,16 +1,17 @@
 importScripts('./fonts/files.js');
-const CACHE_NAME = 'gamdok-v3';
+const CACHE_NAME = 'gamdok-v5';
 const FILES = [
   './', './index.html', './style.css', './manifest.webmanifest', './icon.svg', './package.json', './sw.js',
   './core/score.js', './core/inspect.js', './core/judge.js', './core/review.js', './core/save.js',
   './core/fields.js', './core/items.js', './core/codex.js',
+  './core/rng.js', './core/cardgen.js', './core/sitegen.js', './core/run.js',
   './ui/dom.js', './ui/app.js',
-  './ui/screens/home.js', './ui/screens/briefing.js', './ui/screens/scene.js',
+  './ui/screens/home.js', './ui/screens/scene.js',
+  './ui/screens/run-start.js', './ui/screens/run-scene.js', './ui/screens/reward.js', './ui/screens/run-result.js',
   './ui/screens/cite.js', './ui/screens/rebut.js', './ui/screens/report.js',
   './ui/screens/review.js', './ui/screens/article.js',
   './ui/screens/codex.js',
-  './data/sites.json', './data/articles.json',
-  './data/sites/s01.json', './data/sites/s02.json', './data/sites/s03.json',
+  './data/cards.json', './data/places.json', './data/articles.json',
   './fonts/files.js', ...self.FONT_FILES,
 ];
 
