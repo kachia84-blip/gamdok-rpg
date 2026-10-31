@@ -286,10 +286,15 @@ async function boot() {
     result = run?.result;
     navigate(resumePage());
     if ('serviceWorker' in navigator && window.isSecureContext) {
+      // 새 버전 서비스워커가 자리를 넘겨받으면 한 번만 새로고침해 옛 화면이 남지 않게 한다(첫 설치 때는 하지 않음)
+      const hadController = !!navigator.serviceWorker.controller;
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hadController && !reloaded) { reloaded = true; location.reload(); }
+      });
       navigator.serviceWorker.register('sw.js', { scope: './' }).then(registration => {
         const ready = () => { if (!storageFailed) announce('오프라인 준비를 마쳤습니다. 연결 없이 다시 방문하실 수 있습니다.'); };
-        if (registration.active) ready();
-        registration.installing?.addEventListener('statechange', event => { if (event.target.state === 'activated') ready(); });
+        if (!hadController) registration.installing?.addEventListener('statechange', event => { if (event.target.state === 'activated') ready(); });
       }).catch(() => { if (!storageFailed) announce('오프라인 준비가 되지 않았습니다. 연결된 상태로 이용해 주세요.'); });
     }
   } catch {

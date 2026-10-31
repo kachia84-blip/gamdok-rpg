@@ -1,5 +1,5 @@
 importScripts('./fonts/files.js');
-const CACHE_NAME = 'gamdok-v5';
+const CACHE_NAME = 'gamdok-v6';
 const FILES = [
   './', './index.html', './style.css', './manifest.webmanifest', './icon.svg', './package.json', './sw.js',
   './core/score.js', './core/inspect.js', './core/judge.js', './core/review.js', './core/save.js',
