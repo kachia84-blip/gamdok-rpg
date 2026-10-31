@@ -5,6 +5,6 @@ export function town({ save, story, onEnter, onPage }) {
     h('div', { className: 'town-greeting' }, h('p', {}, story.town.greeting[0]),
       h('p', { className: 'muted' }, `최고 도달 ${save.best.floor}층 · 습득 조문 ${save.skills.length}개`)),
     h('nav', { className: 'town-menu', 'aria-label': '지청 시설' },
-      button(save.run ? '⚔️ 탐험 계속' : '⚔️ 던전 입장', onEnter, { className: 'primary' }),
-      menu.map(([label, page]) => button(label, () => onPage(page)))));
+      button(save.run ? '⚔️ 탐험 계속' : '⚔️ 던전 입장', onEnter, { className: 'primary tile-dungeon' }),
+      menu.map(([label, page]) => button(label, () => onPage(page), { className: `tile-${page}` }))));
 }

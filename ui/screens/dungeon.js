@@ -6,7 +6,7 @@ export function dungeon({ run, story, onEvent, onNext, onTown, message }) {
   const names = { battle: '몬스터', chest: '보물상자', rest: '쉼터', npc: '떠돌이 감독관' };
   return h('div', {}, heading('1장 · 추락의 고층 빌딩', floor.name),
     panel(h('div', { className: 'floor-art', 'aria-hidden': true }, '🔦'), h('p', {}, floor.enter),
-      h('ol', { className: 'event-path' }, run.events.map((item, index) => h('li', { className: index < run.step ? 'done' : index === run.step ? 'current' : '' },
+      h('ol', { className: 'event-path', 'aria-label': '탐험 경로' }, run.events.map((item, index) => h('li', { className: index < run.step ? 'done' : index === run.step ? 'current' : '', 'aria-current': index === run.step ? 'step' : null },
         `${index + 1}. ${item.boss ? '보스' : names[item.type]}${index < run.step ? ' · 완료' : ''}`)))),
     message && panel(h('p', { role: 'status' }, message)),
     done ? panel(h('h2', {}, '이 층을 돌파하셨습니다!'), h('p', {}, '계속 탐험하거나 마을로 돌아가실 수 있습니다.'),

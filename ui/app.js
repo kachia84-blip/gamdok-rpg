@@ -1,7 +1,7 @@
 ﻿import { h, button } from './dom.js';
 import { emptySave, parseSave, STORAGE_KEY } from '../core/save.js';
 import { makeRng } from '../core/rng.js';
-import { allocatePoint, faint, heal, effectiveStats } from '../core/hero.js';
+import { allocatePoint, faint, heal, effectiveStats, xpNeeded } from '../core/hero.js';
 import { citeLabel } from '../core/reveal.js';
 import { startDungeon, nextFloor, rememberWrong, rpgCards } from '../core/dungeon.js';
 import { startBattle, battleAction, ended } from '../core/battle.js';
@@ -18,7 +18,7 @@ import { skillbook } from './screens/skillbook.js';
 import { status as statusScreen } from './screens/status.js';
 import { story as storyScreen } from './screens/story.js';
 import { article } from './screens/article.js';
-import { hpBar, panel, fitScreen } from './screens/common.js';
+import { hpBar, panel, fitScreen, sceneScreen } from './screens/common.js';
 
 const root = document.querySelector('#app');
 const hud = document.querySelector('#hero-status');
@@ -129,7 +129,7 @@ function act(action) {
   save.revived = rememberWrong(save.revived, next);
   if (next.phase === 'won' && !next.wrong) save.revived = save.revived.filter(r => r.cardId !== next.event.cardId || r.v !== next.event.v);
   if (action.type === 'item' || ended(next)) bagOpen = false;
-  persist(); render(false, true);
+  persist(); render(false, true, before);
   if (next.effect && typeof navigator.vibrate === 'function') {
     try { navigator.vibrate(next.effect.target === 'hero' ? 80 : next.effect.critical ? [30, 40, 80] : 30); }
     catch { /* Unsupported haptics must never interrupt a battle. */ }
@@ -161,9 +161,13 @@ function finishStory() {
   navigate('town');
 }
 
-function render(focus = true, animate = false) {
+function render(focus = true, animate = false, previous = null) {
   const hero = save.hero;
-  hud.replaceChildren(h('div', { className: 'hero-summary' }, h('strong', {}, `Lv${hero.lv}`), h('span', {}, `${hero.gold}G`)), hpBar(hero.hp, hero.maxHp, '내 HP'));
+  hud.replaceChildren(h('div', { className: 'hero-summary' }, h('strong', {}, `Lv${hero.lv}`), h('span', {}, `${hero.gold}G`)),
+    hpBar(hero.hp, hero.maxHp, '내 HP', previous?.hero.hp, previous?.hero.maxHp),
+    h('div', { className: 'xp-track', role: 'progressbar', 'aria-label': '경험치', 'aria-valuemin': 0, 'aria-valuemax': xpNeeded(hero.lv), 'aria-valuenow': hero.exp,
+      title: `경험치 ${hero.exp} / ${xpNeeded(hero.lv)}` },
+    h('div', { className: 'xp-fill', style: `transform:scaleX(${Math.min(1, hero.exp / xpNeeded(hero.lv))})` })));
   const common = { hero, save, story: narrative, articles, message, onTown: () => navigate('town') };
   let screen;
   if (page === 'town') screen = town({ ...common, onEnter: enterDungeon, onPage: navigate });
@@ -190,7 +194,7 @@ function render(focus = true, animate = false) {
       save.tutorialDone = true;
       persist();
     }
-    screen = battle({ state, monster: monsterContent(monsters, state.event), bagOpen, articles, animate, tutorial: tutorialVisible,
+    screen = battle({ state, monster: monsterContent(monsters, state.event), bagOpen, articles, animate, previous, entering: focus && !animate, tutorial: tutorialVisible,
       onBag: () => { bagOpen = !bagOpen; render(false); }, onAction: act, onContinue: continueBattle, onArticle: showArticle,
       onExplain: () => showArticle(state.event.instance.article,
         [state.event.instance.why, state.event.instance.violation?.clauseNote, state.event.instance.violation?.rebuttal?.explain]
@@ -220,7 +224,11 @@ function render(focus = true, animate = false) {
   if (page === 'story') screen = storyScreen({ title: storyId === 'boss_clear' ? '1장 클리어!' : '신입 감독관의 첫날',
     lines: narrative[storyId], teaser: storyId === 'boss_clear' ? narrative.chapter2_teaser : null, onDone: finishStory });
   if (screen && page !== 'battle' && page !== 'town') screen = fitScreen(screen);
-  root.replaceChildren(screen ?? h('p', {}, '마을로 이동해 주세요.'));
+  const scene = page === 'story' ? storyId === 'boss_clear' ? 'victory' : 'story' :
+    page === 'inn' && wasFaint || page === 'battle' && save.run?.battle?.phase === 'lost' ? 'faint' :
+    ['battle', 'dungeon'].includes(page) && save.run ?
+      page === 'battle' && save.run.battle?.event.boss ? 'boss' : `floor-${save.run.floor}` : 'town';
+  root.replaceChildren(sceneScreen(screen ?? h('p', {}, '마을로 이동해 주세요.'), scene));
   document.body.classList.toggle('in-battle', page === 'battle');
   if (focus) { window.scrollTo(0, 0); root.querySelector('h1')?.focus({ preventScroll: true }); }
 }
@@ -248,7 +256,7 @@ function offlineSetup() {
 }
 
 async function boot() {
-  root.replaceChildren(h('p', { role: 'status' }, '모험을 준비하고 있습니다…'));
+  root.replaceChildren(sceneScreen(h('p', { role: 'status' }, '모험을 준비하고 있습니다…'), 'story'));
   try {
     const loaded = await Promise.all([loadJSON('data/cards.json'), loadJSON('data/articles.json'), loadJSON('data/monsters.json', true), loadJSON('data/story.json', true)]);
     if (!Array.isArray(loaded[0]) || !rpgCards(loaded[0]).length) throw new Error('카드 자료를 확인해 주세요.');
@@ -267,7 +275,7 @@ async function boot() {
     page = !save.story.seen.includes('prologue') ? 'story' : save.run?.battle ? 'battle' : save.run ? 'dungeon' : wasFaint ? 'inn' : 'town';
     persist(); render(); offlineSetup();
   } catch {
-    root.replaceChildren(panel(h('h1', {}, '모험 자료를 불러오지 못했습니다'), h('p', {}, '카드 자료와 연결 상태를 확인하신 뒤 다시 시도해 주세요.'), button('재시도', boot, { className: 'primary full' })));
+    root.replaceChildren(sceneScreen(panel(h('h1', {}, '모험 자료를 불러오지 못했습니다'), h('p', {}, '카드 자료와 연결 상태를 확인하신 뒤 다시 시도해 주세요.'), button('재시도', boot, { className: 'primary full' })), 'story'));
   }
 }
 

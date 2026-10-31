@@ -1,6 +1,6 @@
 ﻿importScripts('./fonts/files.js');
-const CACHE_NAME = 'gamdok-v12';
-const OPTIONAL_FILES = ['./data/monsters.json', './data/story.json'];
+const CACHE_NAME = 'gamdok-v13';
+const OPTIONAL_FILES = ['./data/monsters.json', './data/story.json', './scenery.css'];
 const FILES = [
   './', './index.html', './style.css', './manifest.webmanifest', './icon.svg', './package.json', './sw.js',
   './core/rng.js', './core/cardgen.js', './core/hero.js', './core/battle.js', './core/dungeon.js', './core/shop.js', './core/save.js', './core/reveal.js',

@@ -12,8 +12,16 @@ export function fitScreen(screen) {
   screen.replaceChildren(header, h('div', { className: 'screen-content', tabIndex: 0, 'aria-label': '화면 내용' }, children), ...(action ? [action] : []));
   return screen;
 }
-export function hpBar(hp, maxHp, label) {
+export function sceneScreen(screen, scene) {
+  return h('div', { className: 'scene-screen' },
+    h('div', { className: 'scenery', dataset: { scene }, 'aria-hidden': true }), screen);
+}
+export function hpBar(hp, maxHp, label, previousHp = hp, previousMaxHp = maxHp) {
+  const ratio = (value, max) => Math.max(0, Math.min(1, value / Math.max(1, max)));
+  const current = ratio(hp, maxHp);
+  const previous = Math.max(current, ratio(previousHp, previousMaxHp));
   return h('div', { className: 'hp-display' }, h('div', { className: 'hp-label' }, label, h('span', {}, `${hp} / ${maxHp}`)),
     h('div', { className: 'hp-track', role: 'progressbar', 'aria-label': label, 'aria-valuemin': 0, 'aria-valuemax': maxHp, 'aria-valuenow': hp },
-      h('div', { className: `hp-fill${hp <= maxHp * 0.3 ? ' low' : ''}`, style: `width:${Math.max(0, Math.min(100, hp / maxHp * 100))}%` })));
+      h('div', { className: `hp-trail${previous > current ? ' draining' : ''}`, style: `--hp-from:${previous};--hp-to:${current};transform:scaleX(${current})`, 'aria-hidden': true }),
+      h('div', { className: `hp-fill${hp <= maxHp * 0.3 ? ' low' : ''}`, style: `transform:scaleX(${current})` })));
 }

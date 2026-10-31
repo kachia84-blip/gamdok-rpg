@@ -10,24 +10,29 @@ function highlighted(text, enabled) {
   return text.split(/(\d+(?:\.\d+)?)/g).map((part, index) => index % 2 ? h('mark', {}, part) : part);
 }
 
-export function battle({ state, monster, bagOpen, onBag, onAction, onContinue, onArticle, onExplain, articles, tutorial = false, animate = false }) {
+export function battle({ state, monster, bagOpen, onBag, onAction, onContinue, onArticle, onExplain, articles, tutorial = false, animate = false, previous = null, entering = false }) {
   const { event, phase, effect } = state;
   const done = ended(state);
   const r = event.instance.violation?.rebuttal;
   const hit = animate && effect;
+  const insight = animate && phase === 'won' && event.instance.kind === 'ok';
   const dialogue = phase === 'rebut' ? `${monster.hit} ${r.claim ?? ''}` : phase === 'won' ?
     (event.instance.kind === 'ok' ? monster.phantom : monster.defeat) : tauntOnly(monster.taunt);
-  const section = h('div', { className: `battle-screen${hit?.target === 'hero' ? ' hero-hit' : ''}` },
-    h('section', { className: `monster-arena${phase === 'won' ? ' defeated' : ''}${hit?.target === 'monster' ? ' monster-hit' : ''}${hit?.critical ? ' critical-hit' : ''}`, 'aria-label': '몬스터 무대' },
+  const section = h('div', { className: `battle-screen${hit?.target === 'hero' ? ' hero-hit' : ''}${hit?.critical ? ' critical-impact' : ''}${insight ? ' insight-success' : ''}` },
+    h('section', { className: `monster-arena${event.boss ? ' boss-arena' : ''}${phase === 'won' ? ' defeated' : ''}${hit?.target === 'monster' ? ' monster-hit' : ''}${hit?.critical ? ' critical-hit' : ''}`, 'aria-label': '몬스터 무대' },
       h('header', { className: 'monster-heading' },
         h('p', { className: 'eyebrow' }, `${event.floor}층${event.boss ? ' · 보스' : event.revived ? ' · 되살아난 몬스터' : ''}`),
         h('h1', { tabIndex: -1 }, monster.name),
         h('p', { className: 'monster-title' }, `Lv${state.monster.lv}${monster.title ? ' · ' + monster.title : ''}`)),
       h('div', { className: 'monster-stage' },
-        h('span', { className: 'monster-emoji', 'aria-hidden': true }, monster.emoji),
+        h('span', { className: 'monster-shadow', 'aria-hidden': true }),
+        h('span', { className: `monster-sprite${entering && !done ? ' entering' : ''}`, 'aria-hidden': true },
+          h('span', { className: 'monster-emoji' }, monster.emoji), h('span', { className: 'hit-flash' })),
+        hit?.target === 'monster' && h('span', { className: 'slash-light', 'aria-hidden': true }),
+        insight && h('span', { className: 'insight-wave', 'aria-hidden': true }),
         hit && h('span', { className: `damage-float ${effect.target}${effect.critical ? ' critical' : ''}`, role: 'status' }, `💥 ${effect.damage}${effect.critical ? ' 치명타' : ''}`)),
-      hpBar(state.monster.hp, state.monster.maxHp, '몬스터 HP')),
-    h('blockquote', { className: 'speech' }, dialogue),
+      hpBar(state.monster.hp, state.monster.maxHp, '몬스터 HP', previous?.monster.hp, previous?.monster.maxHp)),
+    h('div', { className: 'speech-wrap' }, h('blockquote', { className: 'speech' }, dialogue)),
     h('section', { className: 'situation', 'aria-label': '현장 상황' },
       h('p', {}, '📋 ', highlighted(event.instance.text, state.weakness)),
       state.revealed !== null && h('p', { className: 'reveal' }, state.revealed ? '📏 환영입니다.' : '📏 진짜 위험입니다.')),
@@ -40,11 +45,11 @@ export function battle({ state, monster, bagOpen, onBag, onAction, onContinue, o
   const dock = h('section', { className: 'battle-controls', 'aria-label': '전투 조작판', dataset: { phase: done ? 'result' : bagOpen ? 'bag' : phase } });
   if (done) {
     const reward = state.reward;
-    dock.append(h('h2', {}, phase === 'won' ? '전투 승리!' : phase === 'lost' ? '숙직실로…' : '도망 성공'),
+    dock.append(h('h2', { className: phase === 'won' ? 'victory-banner' : '' }, phase === 'won' ? '전투 승리!' : phase === 'lost' ? '숙직실로…' : '도망 성공'),
       h('div', { className: 'result-summary' },
         reward && h('p', {}, `경험치 +${reward.exp} · ${reward.gold}G${reward.drop ? ` · ${CONSUMABLES[reward.drop]?.name ?? ''} 획득` : ''}`),
         reward?.learned && h('p', { className: 'learned' }, `📜 ${shortClause(event.instance.article, event.instance.violation?.clauseNote)} '${articles[event.instance.article]?.title ?? '조문'}' 습득`),
-        reward?.levels > 0 && h('p', { className: 'celebrate' }, `레벨업! Lv${state.hero.lv} · 포인트 +${reward.levels * 3}`)),
+        reward?.levels > 0 && h('p', { className: 'celebrate' }, `LEVEL UP! 레벨업! Lv${state.hero.lv} · 포인트 +${reward.levels * 3}`)),
       h('div', { className: 'result-links' },
         button('📖 원문 보기', () => onArticle(event.instance.article), { className: 'secondary' }),
         button('해설', onExplain, { className: 'secondary' })),
@@ -74,10 +79,10 @@ export function battle({ state, monster, bagOpen, onBag, onAction, onContinue, o
     dock.append(button('🎒 가방', onBag, { className: 'secondary full', 'aria-expanded': false }));
   } else {
     dock.append(h('nav', { className: 'battle-actions', 'aria-label': '전투 행동' },
-      button('⚔️ 조문 베기', () => onAction({ type: 'slash' })),
-      button('🔍 간파', () => onAction({ type: 'insight' })),
-      button('🎒 가방', onBag, { 'aria-expanded': false }),
-      button('🏃 도망', () => onAction({ type: 'flee' }))));
+      button('⚔️ 조문 베기', () => onAction({ type: 'slash' }), { className: 'action-slash' }),
+      button('🔍 간파', () => onAction({ type: 'insight' }), { className: 'action-insight' }),
+      button('🎒 가방', onBag, { className: 'action-bag', 'aria-expanded': false }),
+      button('🏃 도망', () => onAction({ type: 'flee' }), { className: 'action-flee' })));
   }
   section.append(dock);
   return section;
