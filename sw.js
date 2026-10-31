@@ -1,23 +1,23 @@
-importScripts('./fonts/files.js');
-const CACHE_NAME = 'gamdok-v8';
+﻿importScripts('./fonts/files.js');
+const CACHE_NAME = 'gamdok-v10';
+const OPTIONAL_FILES = ['./data/monsters.json', './data/story.json'];
 const FILES = [
   './', './index.html', './style.css', './manifest.webmanifest', './icon.svg', './package.json', './sw.js',
-  './core/score.js', './core/inspect.js', './core/judge.js', './core/review.js', './core/save.js',
-  './core/fields.js', './core/items.js', './core/codex.js',
-  './core/rng.js', './core/cardgen.js', './core/sitegen.js', './core/run.js',
-  './ui/dom.js', './ui/app.js',
-  './ui/screens/home.js', './ui/screens/scene.js',
-  './ui/screens/run-start.js', './ui/screens/run-scene.js', './ui/screens/reward.js', './ui/screens/run-result.js',
-  './ui/screens/cite.js', './ui/screens/rebut.js', './ui/screens/report.js',
-  './ui/screens/review.js', './ui/screens/article.js',
-  './ui/screens/codex.js',
-  './data/cards.json', './data/places.json', './data/articles.json',
+  './core/rng.js', './core/cardgen.js', './core/hero.js', './core/battle.js', './core/dungeon.js', './core/shop.js', './core/save.js',
+  './ui/dom.js', './ui/content.js', './ui/app.js',
+  './ui/screens/common.js', './ui/screens/town.js', './ui/screens/dungeon.js', './ui/screens/battle.js',
+  './ui/screens/levelup.js', './ui/screens/shop.js', './ui/screens/inn.js', './ui/screens/senior.js',
+  './ui/screens/skillbook.js', './ui/screens/status.js', './ui/screens/story.js', './ui/screens/article.js',
+  './data/cards.json', './data/articles.json', ...OPTIONAL_FILES,
   './fonts/files.js', ...self.FONT_FILES,
 ];
 
 self.addEventListener('install', event => {
-  // 브라우저 HTTP 캐시의 옛 파일을 담지 않게 서버에서 새로 받음
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(FILES.map(file => new Request(file, { cache: 'reload' })))).then(() => self.skipWaiting()));
+  // 서버에서 다시 받습니다. 집필 중인 이야기 파일이 없어도 기본 이야기로 실행합니다.
+  event.waitUntil(caches.open(CACHE_NAME).then(async cache => {
+    await cache.addAll(FILES.filter(file => !OPTIONAL_FILES.includes(file)).map(file => new Request(file, { cache: 'reload' })));
+    await Promise.allSettled(OPTIONAL_FILES.map(file => cache.add(new Request(file, { cache: 'reload' }))));
+  }).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', event => {
@@ -31,7 +31,13 @@ self.addEventListener('fetch', event => {
   event.respondWith(caches.open(CACHE_NAME).then(async cache => {
     const cached = await cache.match(event.request, { ignoreSearch: true });
     if (cached) return cached;
-    try { return await fetch(event.request); } catch {
+    try {
+      const response = await fetch(event.request);
+      if (response.ok && OPTIONAL_FILES.some(file => new URL(file, self.registration.scope).pathname === url.pathname)) {
+        await cache.put(event.request, response.clone());
+      }
+      return response;
+    } catch {
       if (event.request.mode === 'navigate') {
         const home = await cache.match('./index.html');
         if (home) return home;
