@@ -1,5 +1,5 @@
 importScripts('./fonts/files.js');
-const CACHE_NAME = 'gamdok-v7';
+const CACHE_NAME = 'gamdok-v8';
 const FILES = [
   './', './index.html', './style.css', './manifest.webmanifest', './icon.svg', './package.json', './sw.js',
   './core/score.js', './core/inspect.js', './core/judge.js', './core/review.js', './core/save.js',
@@ -16,7 +16,8 @@ const FILES = [
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(FILES.map(file => new Request(file, { cache: 'reload' }))))  // 브라우저 HTTP 캐시의 옛 파일을 담지 않게 서버에서 새로 받음.then(() => self.skipWaiting()));
+  // 브라우저 HTTP 캐시의 옛 파일을 담지 않게 서버에서 새로 받음
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(FILES.map(file => new Request(file, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', event => {
