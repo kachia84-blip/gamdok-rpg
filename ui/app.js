@@ -1,7 +1,8 @@
 ﻿import { h, button } from './dom.js';
 import { emptySave, parseSave, STORAGE_KEY } from '../core/save.js';
 import { makeRng } from '../core/rng.js';
-import { allocatePoint, faint, heal } from '../core/hero.js';
+import { allocatePoint, faint, heal, effectiveStats } from '../core/hero.js';
+import { citeLabel } from '../core/reveal.js';
 import { startDungeon, nextFloor, rememberWrong, rpgCards } from '../core/dungeon.js';
 import { startBattle, battleAction, ended } from '../core/battle.js';
 import { buy, stay, consume, CONSUMABLES } from '../core/shop.js';
@@ -17,7 +18,7 @@ import { skillbook } from './screens/skillbook.js';
 import { status as statusScreen } from './screens/status.js';
 import { story as storyScreen } from './screens/story.js';
 import { article } from './screens/article.js';
-import { hpBar, panel } from './screens/common.js';
+import { hpBar, panel, fitScreen } from './screens/common.js';
 
 const root = document.querySelector('#app');
 const hud = document.querySelector('#hero-status');
@@ -34,8 +35,14 @@ let message = '';
 let wasFaint = false;
 let bagOpen = false;
 let storageFailed = false;
+let tutorialVisible = false;
+let toastTimer;
 const rng = () => makeRng(crypto.getRandomValues(new Uint32Array(1))[0]);
-const announce = text => { status.textContent = text; };
+const announce = text => {
+  clearTimeout(toastTimer);
+  status.textContent = text;
+  toastTimer = setTimeout(() => { status.textContent = ''; }, 2000);
+};
 
 function persist() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(save)); storageFailed = false; }
@@ -46,6 +53,7 @@ function navigate(next) {
   page = next;
   message = '';
   bagOpen = false;
+  tutorialVisible = false;
   persist();
   render();
 }
@@ -54,8 +62,8 @@ function markSeen(id) {
   if (!save.story.seen.includes(id)) save.story.seen.push(id);
 }
 
-function showArticle(no) {
-  const dialog = article({ articleNo: no, articles });
+function showArticle(no, explanation = null) {
+  const dialog = article({ articleNo: no, articles, explanation });
   document.body.append(dialog);
   dialog.showModal();
 }
@@ -114,6 +122,7 @@ function act(action) {
   const before = save.run.battle;
   const next = battleAction(before, action, rng());
   if (next === before) return;
+  tutorialVisible = false;
   save.run.battle = next;
   save.hero = next.hero;
   save.skills = next.skills;
@@ -121,6 +130,10 @@ function act(action) {
   if (next.phase === 'won' && !next.wrong) save.revived = save.revived.filter(r => r.cardId !== next.event.cardId || r.v !== next.event.v);
   if (action.type === 'item' || ended(next)) bagOpen = false;
   persist(); render(false, true);
+  if (next.effect && typeof navigator.vibrate === 'function') {
+    try { navigator.vibrate(next.effect.target === 'hero' ? 80 : next.effect.critical ? [30, 40, 80] : 30); }
+    catch { /* Unsupported haptics must never interrupt a battle. */ }
+  }
   if (next.phase === 'rebut' && before.phase !== 'rebut') root.querySelector('input')?.focus({ preventScroll: true });
 }
 
@@ -166,12 +179,23 @@ function render(focus = true, animate = false) {
       const npc = narrative.events.npc[0] ?? { name: '떠돌이 감독관', emoji: '🧓' };
       screen.append(panel(h('h2', {}, `${npc.emoji} ${npc.name}`), h('p', {}, event.text),
         h('p', {}, '이 상황에 맞는 조문을 골라 주세요.'),
-        h('div', { className: 'choices' }, event.choices.map(value => button(value, () => answerQuiz(value))))));
+        h('div', { className: 'choices' }, event.choices.map(value =>
+          button(citeLabel(value, articles, effectiveStats(save.hero).law, save.skills), () => answerQuiz(value))))));
     }
   }
-  if (page === 'battle' && save.run?.battle) screen = battle({ state: save.run.battle,
-    monster: monsterContent(monsters, save.run.battle.event), bagOpen, articles, animate,
-    onBag: () => { bagOpen = !bagOpen; render(false); }, onAction: act, onContinue: continueBattle, onArticle: showArticle });
+  if (page === 'battle' && save.run?.battle) {
+    const state = save.run.battle;
+    if (!save.tutorialDone && !ended(state)) {
+      tutorialVisible = true;
+      save.tutorialDone = true;
+      persist();
+    }
+    screen = battle({ state, monster: monsterContent(monsters, state.event), bagOpen, articles, animate, tutorial: tutorialVisible,
+      onBag: () => { bagOpen = !bagOpen; render(false); }, onAction: act, onContinue: continueBattle, onArticle: showArticle,
+      onExplain: () => showArticle(state.event.instance.article,
+        [state.event.instance.why, state.event.instance.violation?.clauseNote, state.event.instance.violation?.rebuttal?.explain]
+          .filter(Boolean).join('\n\n') || '이 전투에는 별도 해설이 없습니다.') });
+  }
   if (page === 'levelup') screen = levelup({ hero, onAllocate: stat => {
     save.hero = allocatePoint(save.hero, stat);
     if (save.run?.battle) save.run.battle.hero = save.hero;
@@ -195,6 +219,7 @@ function render(focus = true, animate = false) {
     } });
   if (page === 'story') screen = storyScreen({ title: storyId === 'boss_clear' ? '1장 클리어!' : '신입 감독관의 첫날',
     lines: narrative[storyId], teaser: storyId === 'boss_clear' ? narrative.chapter2_teaser : null, onDone: finishStory });
+  if (screen && page !== 'battle' && page !== 'town') screen = fitScreen(screen);
   root.replaceChildren(screen ?? h('p', {}, '마을로 이동해 주세요.'));
   document.body.classList.toggle('in-battle', page === 'battle');
   if (focus) { window.scrollTo(0, 0); root.querySelector('h1')?.focus({ preventScroll: true }); }
@@ -230,7 +255,13 @@ async function boot() {
     cards = rpgCards(loaded[0]);
     articles = loaded[1] && typeof loaded[1] === 'object' ? loaded[1] : {};
     monsters = loaded[2]; narrative = storyContent(loaded[3]);
-    try { save = parseSave(localStorage.getItem(STORAGE_KEY)); }
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      save = parseSave(stored);
+      // parseSave owns game validation; this optional UI flag stays outside core.
+      try { save.tutorialDone = JSON.parse(stored)?.tutorialDone === true; }
+      catch { save.tutorialDone = false; }
+    }
     catch { storageFailed = true; announce('저장소에 접근할 수 없습니다. 현재 창에서 진행해 주세요.'); }
     if (save.hero.hp === 0 && !save.run?.battle) { save.hero = faint(save.hero); wasFaint = true; }
     page = !save.story.seen.includes('prologue') ? 'story' : save.run?.battle ? 'battle' : save.run ? 'dungeon' : wasFaint ? 'inn' : 'town';
