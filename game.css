@@ -1,0 +1,86 @@
+/* v5.3 additions; style.css belongs to the other graphics author. */
+#hero-status{grid-template-columns:auto minmax(0,1fr) auto 32px;column-gap:8px}
+#hero-status .sound-toggle{grid-column:4;grid-row:1;min-height:30px;height:30px;width:32px;padding:0;border-radius:3px;font-size:18px;line-height:1;box-shadow:0 2px 0 #090f20;background:#27334c}
+#hero-status .xp-track{grid-column:1/-1}
+
+/* The map takes exactly the space remaining below the greeting. */
+.town-screen{gap:6px}
+.town-screen .town-greeting{padding:7px 10px;max-height:82px;border-radius:3px}
+.town-hint{flex:none;margin:0;font-size:11px;text-align:center}
+.town-menu.town-map{position:relative;isolation:isolate;flex:1;min-height:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat(9,minmax(0,1fr));gap:0;padding:0;overflow:hidden;border:3px double #a69a7d;border-radius:3px;background:#253a36;box-shadow:inset 0 0 0 2px #0a1523,0 3px 0 #080f20}
+.town-map .town-cell{min-height:0;min-width:0;margin:0;padding:0;border:0;border-radius:0;box-shadow:none;transition:none}
+.town-map .terrain-road{background:repeating-linear-gradient(0deg,transparent 0 47%,#403d36 48% 51%,transparent 52%),repeating-linear-gradient(90deg,#86765a 0 47%,#5e5645 48% 51%,#86765a 52%);border:1px solid #a48c6533}
+.town-map .terrain-road:hover:enabled{background-color:#b69c6a;box-shadow:inset 0 0 0 2px #e8cb8a}
+.town-map .terrain-road:active:enabled{transform:none}
+.town-map .terrain-grass{background:repeating-linear-gradient(135deg,transparent 0 9px,#91ad6333 10px 12px,transparent 13px 21px),#354e3a}
+.town-map .terrain-wall{background:repeating-linear-gradient(0deg,transparent 0 35%,#14232b 36% 43%,transparent 44%),repeating-linear-gradient(90deg,#53615e 0 40%,#263c40 41% 47%,#53615e 48%);border-top:3px solid #869080}
+.town-map .terrain-plot{background:#283d3b}
+.town-menu.town-map .town-building{z-index:2;align-self:stretch;min-height:0;padding:8px 5px 4px;margin:4px 4px 8px;overflow:hidden;border:3px double #9c947a;border-bottom:5px solid #111e2b;border-radius:3px;box-shadow:0 4px 0 #102029;background:#3d4854;color:#f9e9c5;text-shadow:0 2px 0 #14202a;font-size:clamp(12px,3.5vw,17px);line-height:1.3;white-space:normal}
+.town-map .town-building::before{content:'';position:absolute;inset:0 0 auto;height:7px;z-index:-1;border-radius:0;clip-path:none;opacity:1;background:#86765a;border-bottom:2px solid #192532}
+.town-map .town-building::after{content:'';position:absolute;bottom:0;left:calc(50% - 9px);width:18px;height:9px;background:#0e1b29;border:1px solid #aa9164;border-bottom:0;pointer-events:none}
+.town-menu.town-map .tile-dungeon{background:#51413d;color:#ffe6ae;border-color:#b79365}
+.town-map .tile-dungeon::before{background:#8d634e}
+.town-menu.town-map .tile-shop{background:#4c3f4b}
+.town-map .tile-shop::before{background:repeating-linear-gradient(90deg,#af7365 0 15%,#e0cda6 15% 30%);height:13px}
+.town-menu.town-map .tile-inn{background:radial-gradient(circle at 85% 25%,#e7d49d 0 4px,transparent 5px),#303e59}
+.town-map .tile-inn::before{background:#6e7894}
+.town-menu.town-map .tile-senior{background:#3e4e42}
+.town-map .tile-senior::before{background:#8a9472}
+.town-menu.town-map .tile-skillbook{background:#443f59}
+.town-map .tile-skillbook::before{background:#928097}
+.town-menu.town-map .tile-status{background:#344b53}
+.town-map .tile-status::before{background:#75968e}
+.town-player{position:absolute;top:0;left:0;width:calc(100% / 7);height:calc(100% / 9);z-index:3;display:grid;place-items:center;pointer-events:none;transition:transform 85ms linear}
+.town-player::before{content:'';position:absolute;bottom:8%;left:20%;width:60%;height:16%;border-radius:50%;background:#101b2e88}
+.town-player-icon{position:relative;font-size:clamp(22px,4.5dvh,36px);line-height:1;text-shadow:0 2px 0 #152431}
+.town-map[data-walking="true"] .town-player-icon{animation:town-step .18s linear infinite}
+
+/* Both actors use the existing stage; no extra row or stage height. */
+.monster-arena .monster-heading{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px;max-height:38px}
+.monster-arena .monster-heading h1{font-size:clamp(16px,4.8vw,23px);max-height:2.4em;overflow:auto}
+.monster-arena .monster-heading .eyebrow,.monster-arena .monster-title{margin:0;font-size:10px;line-height:1.25;max-height:32px;max-width:70px;overflow:auto}
+.monster-stage.sideview-stage{display:block;overflow:hidden;background:radial-gradient(ellipse at 25% 55%,#d4d8b84d,transparent 32%),radial-gradient(ellipse at 75% 50%,#e4cfa66b,transparent 36%)}
+.sideview-stage::before{content:'';position:absolute;bottom:3%;left:3%;right:3%;height:2px;background:#a89c7366}
+.sideview-stage .hero-actor,.sideview-stage .monster-actor{position:absolute;top:0;bottom:0;width:30%;display:flex;align-items:center;justify-content:center;z-index:1}
+.sideview-stage .hero-actor{left:10%}
+.sideview-stage .monster-actor{left:60%}
+.sideview-stage .hero-sprite{display:block;font-size:clamp(20px,65cqh,96px);line-height:1;filter:drop-shadow(0 4px 0 #080e224d);animation:idle 3s ease-in-out infinite}
+.sideview-stage .monster-emoji{font-size:clamp(22px,78cqh,110px)}
+.boss-arena .sideview-stage .monster-emoji{font-size:clamp(26px,88cqh,132px)}
+.sideview-stage .hero-shadow,.sideview-stage .monster-shadow{position:absolute;bottom:5%;width:25%;height:8%;border-radius:50%;background:#070f2080;z-index:0;animation:none}
+.sideview-stage .hero-shadow{left:12.5%}
+.sideview-stage .monster-shadow{left:62.5%}
+.hero-attacks .hero-actor{animation:hero-charge .52s ease-in-out both}
+.monster-attacks .monster-actor{animation:monster-charge .48s ease-in-out both}
+.monster-attacks .hero-sprite{animation:hero-flinch .48s ease-in-out both}
+.monster-hit .sideview-stage .monster-sprite{animation:sideview-hit .52s ease-in-out both,idle 3s .52s ease-in-out infinite}
+.monster-hit .sideview-stage .hit-flash{animation:sideview-flash .52s ease-out both}
+.sideview-stage .slash-light{left:48%;top:5%;width:48%;height:90%;animation:sideview-blade .52s ease-out both}
+.sideview-stage .damage-float{top:5%;font-size:clamp(18px,5vw,28px);animation-delay:.18s}
+.sideview-stage .damage-float.hero{left:3%;right:auto}
+.sideview-stage .damage-float.critical{font-size:clamp(23px,6vw,36px)}
+.hero-insight .insight-glint{position:absolute;top:0;left:25%;font-size:clamp(18px,28cqh,32px);filter:drop-shadow(0 0 6px #9fe9ff);animation:insight-glint .6s ease-out both}
+.sideview-stage .insight-wave{left:45%;width:40%;height:90%}
+.hero-victory .hero-sprite{animation:hero-cheer .5s .48s ease-out both}
+.defeated .sideview-stage .monster-sprite{animation:monster-exit .65s .25s ease-in both}
+.defeated .sideview-stage .monster-shadow{animation:shadow-exit .65s .25s ease-in both}
+.critical-hit .sideview-stage{animation:critical-zoom .45s ease-out both}
+.fx-shake{animation:fx-shake .28s ease-in-out both}
+.fx-shake-strong{animation:fx-shake-strong .42s ease-in-out both}
+@keyframes town-step{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-3px) rotate(4deg)}}
+@keyframes hero-charge{0%,100%{transform:translateX(0)}35%,55%{transform:translateX(125%)}}
+@keyframes monster-charge{0%,100%{transform:translateX(0)}35%,55%{transform:translateX(-125%)}}
+@keyframes hero-flinch{0%,25%,100%{transform:translateX(0);opacity:1}35%,65%{transform:translateX(-5px);opacity:.25}50%,80%{transform:translateX(3px);opacity:1}}
+@keyframes sideview-hit{0%,35%,100%{transform:translateX(0)}45%,65%{transform:translateX(6px)}55%,75%{transform:translateX(-4px)}}
+@keyframes sideview-flash{0%,35%,100%{opacity:0}40%,65%{opacity:1}50%{opacity:0}}
+@keyframes sideview-blade{0%,30%{transform:translateX(-35%) scale(.3);opacity:0}45%{transform:translateX(0) scale(1);opacity:1}100%{transform:translateX(20%) scale(1.1);opacity:0}}
+@keyframes insight-glint{0%{transform:translateY(5px) scale(.4);opacity:0}40%,75%{transform:translateY(-4px) scale(1.15);opacity:1}100%{transform:translateY(-8px) scale(1);opacity:0}}
+@keyframes hero-cheer{0%,100%{transform:translateY(0) rotate(0)}35%{transform:translateY(-10px) rotate(-12deg)}65%{transform:translateY(-4px) rotate(12deg)}}
+@keyframes fx-shake{0%,100%{transform:translateX(0)}25%,65%{transform:translateX(-3px)}45%,85%{transform:translateX(3px)}}
+@keyframes fx-shake-strong{0%,100%{transform:translate(0,0)}20%,60%{transform:translate(-5px,2px)}40%,80%{transform:translate(5px,-2px)}}
+@media(prefers-reduced-motion:reduce){
+  .town-player{transition:none}
+  .town-player-icon,.sideview-stage *,.critical-hit .sideview-stage,.fx-shake,.fx-shake-strong{animation:none!important}
+  .sideview-stage .insight-glint{display:none}
+  .defeated .sideview-stage .monster-sprite,.defeated .sideview-stage .monster-shadow{opacity:0}
+}

@@ -19,6 +19,7 @@ import { status as statusScreen } from './screens/status.js';
 import { story as storyScreen } from './screens/story.js';
 import { article } from './screens/article.js';
 import { hpBar, panel, fitScreen, sceneScreen } from './screens/common.js';
+import { initFx, sfx, battleFx, isSoundEnabled, toggleSound } from './fx.js';
 
 const root = document.querySelector('#app');
 const hud = document.querySelector('#hero-status');
@@ -37,6 +38,8 @@ let bagOpen = false;
 let storageFailed = false;
 let tutorialVisible = false;
 let toastTimer;
+let disposeScreen;
+initFx();
 const rng = () => makeRng(crypto.getRandomValues(new Uint32Array(1))[0]);
 const announce = text => {
   clearTimeout(toastTimer);
@@ -96,12 +99,14 @@ function openEvent() {
     save.hero = { ...save.hero, gold: save.hero.gold + event.gold };
     message = `보물상자에서 ${event.gold}G를 얻으셨습니다.`;
     run.step++;
+    sfx('coin');
   }
   if (event.type === 'rest') {
     const before = save.hero.hp;
     save.hero = heal(save.hero, event.hp);
     message = `쉼터에서 HP ${save.hero.hp - before}을 회복하셨습니다.`;
     run.step++;
+    sfx('heal');
   }
   persist(); render();
 }
@@ -111,6 +116,7 @@ function answerQuiz(value) {
   const event = run?.events[run.step];
   if (event?.type !== 'npc' || !event.opened || !event.choices.includes(value)) return;
   const correct = value === event.article;
+  sfx(correct ? 'coin' : 'miss');
   if (correct) save.hero = { ...save.hero, gold: save.hero.gold + event.gold };
   message = `${correct ? `정답입니다! ${event.gold}G를 얻으셨습니다.` : `알맞은 조문은 ${event.article}입니다.`} ${event.quote}`;
   run.step++;
@@ -130,10 +136,7 @@ function act(action) {
   if (next.phase === 'won' && !next.wrong) save.revived = save.revived.filter(r => r.cardId !== next.event.cardId || r.v !== next.event.v);
   if (action.type === 'item' || ended(next)) bagOpen = false;
   persist(); render(false, true, before);
-  if (next.effect && typeof navigator.vibrate === 'function') {
-    try { navigator.vibrate(next.effect.target === 'hero' ? 80 : next.effect.critical ? [30, 40, 80] : 30); }
-    catch { /* Unsupported haptics must never interrupt a battle. */ }
-  }
+  battleFx(before, next, root);
   if (next.phase === 'rebut' && before.phase !== 'rebut') root.querySelector('input')?.focus({ preventScroll: true });
 }
 
@@ -162,12 +165,20 @@ function finishStory() {
 }
 
 function render(focus = true, animate = false, previous = null) {
+  disposeScreen?.();
+  disposeScreen = null;
   const hero = save.hero;
+  const soundButton = button(isSoundEnabled() ? '🔊' : '🔇', () => {
+    toggleSound();
+    soundButton.textContent = isSoundEnabled() ? '🔊' : '🔇';
+    soundButton.setAttribute('aria-label', isSoundEnabled() ? '소리 끄기' : '소리 켜기');
+    soundButton.setAttribute('aria-pressed', String(isSoundEnabled()));
+  }, { className: 'sound-toggle', 'aria-label': isSoundEnabled() ? '소리 끄기' : '소리 켜기', 'aria-pressed': isSoundEnabled() });
   hud.replaceChildren(h('div', { className: 'hero-summary' }, h('strong', {}, `Lv${hero.lv}`), h('span', {}, `${hero.gold}G`)),
     hpBar(hero.hp, hero.maxHp, '내 HP', previous?.hero.hp, previous?.hero.maxHp),
     h('div', { className: 'xp-track', role: 'progressbar', 'aria-label': '경험치', 'aria-valuemin': 0, 'aria-valuemax': xpNeeded(hero.lv), 'aria-valuenow': hero.exp,
       title: `경험치 ${hero.exp} / ${xpNeeded(hero.lv)}` },
-    h('div', { className: 'xp-fill', style: `transform:scaleX(${Math.min(1, hero.exp / xpNeeded(hero.lv))})` })));
+    h('div', { className: 'xp-fill', style: `transform:scaleX(${Math.min(1, hero.exp / xpNeeded(hero.lv))})` })), soundButton);
   const common = { hero, save, story: narrative, articles, message, onTown: () => navigate('town') };
   let screen;
   if (page === 'town') screen = town({ ...common, onEnter: enterDungeon, onPage: navigate });
@@ -207,9 +218,12 @@ function render(focus = true, animate = false, previous = null) {
   }, onDone: () => { if (!save.hero.points) navigate(levelReturn); } });
   if (page === 'shop') screen = shop({ ...common, onBuy: id => {
     const result = buy(save.hero, id); save.hero = result.hero; message = result.message; persist(); render(false);
+    if (result.ok) sfx('coin');
   } });
   if (page === 'inn') screen = inn({ ...common, wasFaint, onStay: () => {
+    const beforeHp = save.hero.hp;
     const result = stay(save.hero); save.hero = result.hero; message = result.message; persist(); render(false);
+    if (save.hero.hp > beforeHp) sfx('heal');
   } });
   if (page === 'senior') screen = senior({ ...common, seen: save.story.seen, onRead: id => { markSeen(id); persist(); render(false); },
     onPrologue: () => { storyId = 'prologue'; navigate('story'); } });
@@ -219,11 +233,12 @@ function render(focus = true, animate = false, previous = null) {
       if (!CONSUMABLES[id]?.hp || save.hero.hp === save.hero.maxHp) return;
       const next = consume(save.hero, id);
       if (next === save.hero) return;
-      save.hero = next; message = `${CONSUMABLES[id].name}를 사용하셨습니다.`; persist(); render(false);
+      save.hero = next; message = `${CONSUMABLES[id].name}를 사용하셨습니다.`; persist(); render(false); sfx('heal');
     } });
   if (page === 'story') screen = storyScreen({ title: storyId === 'boss_clear' ? '1장 클리어!' : '신입 감독관의 첫날',
     lines: narrative[storyId], teaser: storyId === 'boss_clear' ? narrative.chapter2_teaser : null, onDone: finishStory });
   if (screen && page !== 'battle' && page !== 'town') screen = fitScreen(screen);
+  disposeScreen = screen?.dispose;
   const scene = page === 'story' ? storyId === 'boss_clear' ? 'victory' : 'story' :
     page === 'inn' && wasFaint || page === 'battle' && save.run?.battle?.phase === 'lost' ? 'faint' :
     ['battle', 'dungeon'].includes(page) && save.run ?
