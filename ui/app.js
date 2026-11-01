@@ -1,12 +1,11 @@
 ﻿import { h, button } from './dom.js';
 import { emptySave, parseSave, STORAGE_KEY } from '../core/save.js';
 import { makeRng } from '../core/rng.js';
-import { allocatePoint, faint, heal, effectiveStats, xpNeeded } from '../core/hero.js';
-import { citeLabel } from '../core/reveal.js';
+import { allocatePoint, faint, heal, xpNeeded } from '../core/hero.js';
 import { startDungeon, nextFloor, rememberWrong, rpgCards } from '../core/dungeon.js';
 import { startBattle, battleAction, ended } from '../core/battle.js';
 import { buy, stay, consume, CONSUMABLES } from '../core/shop.js';
-import { storyContent, monsterContent } from './content.js';
+import { storyContent, monsterContent, chooseLine } from './content.js';
 import { town } from './screens/town.js';
 import { dungeon } from './screens/dungeon.js';
 import { battle } from './screens/battle.js';
@@ -36,7 +35,7 @@ let message = '';
 let wasFaint = false;
 let bagOpen = false;
 let storageFailed = false;
-let tutorialVisible = false;
+let battleView;
 let toastTimer;
 let disposeScreen;
 initFx();
@@ -56,7 +55,6 @@ function navigate(next) {
   page = next;
   message = '';
   bagOpen = false;
-  tutorialVisible = false;
   persist();
   render();
 }
@@ -79,6 +77,7 @@ function enterDungeon() {
 
 function returnTown() {
   save.run = null;
+  battleView = null;
   wasFaint = false;
   navigate('town');
 }
@@ -89,6 +88,7 @@ function openEvent() {
   if (!event || run.battle) return;
   message = '';
   if (event.type === 'battle') {
+    battleView = null;
     run.battle = startBattle(save.hero, event, save.skills, rng());
     run.battle.log = [monsterContent(monsters, event).appear];
     navigate('battle');
@@ -128,7 +128,13 @@ function act(action) {
   const before = save.run.battle;
   const next = battleAction(before, action, rng());
   if (next === before) return;
-  tutorialVisible = false;
+  next.ui = { ...next.ui, messages: [] };
+  if (next.effect?.target === 'monster') battleView.monster.hit = chooseLine(battleView.monster.hits, battleView.monster.hit);
+  if (next.phase === 'rebut' && before.phase !== 'rebut') {
+    next.ui.messages = [{ text: [battleView.monster.hit, next.event.instance.violation.rebuttal.claim].filter(Boolean).join(' '), speaker: battleView.monster.name }];
+  } else if (action.type === 'rebut' && next.attempts > before.attempts && !ended(next)) {
+    next.ui.messages = [{ text: next.log[before.log.length], speaker: '선배 감독관' }];
+  }
   save.run.battle = next;
   save.hero = next.hero;
   save.skills = next.skills;
@@ -137,7 +143,6 @@ function act(action) {
   if (action.type === 'item' || ended(next)) bagOpen = false;
   persist(); render(false, true, before);
   battleFx(before, next, root);
-  if (next.phase === 'rebut' && before.phase !== 'rebut') root.querySelector('input')?.focus({ preventScroll: true });
 }
 
 function continueBattle() {
@@ -155,6 +160,7 @@ function continueBattle() {
   if (state.phase === 'fled' && state.event.boss) { returnTown(); return; }
   save.run.step++;
   save.run.battle = null;
+  battleView = null;
   navigate('dungeon');
 }
 
@@ -183,29 +189,26 @@ function render(focus = true, animate = false, previous = null) {
   let screen;
   if (page === 'town') screen = town({ ...common, onEnter: enterDungeon, onPage: navigate });
   if (page === 'dungeon' && save.run) {
-    screen = dungeon({ ...common, run: save.run, onEvent: openEvent, onTown: returnTown,
+    screen = dungeon({ ...common, run: save.run, onEvent: openEvent, onTown: returnTown, onQuiz: answerQuiz,
+      onFloorSeen: () => { save.run.uiSeenFloors = [...new Set([...(Array.isArray(save.run.uiSeenFloors) ? save.run.uiSeenFloors : []), save.run.floor])]; persist(); },
       onNext: () => {
         save.run = nextFloor(save.run, cards, rng());
         save.best.floor = Math.max(save.best.floor, save.run.floor);
         navigate('dungeon');
       } });
-    const event = save.run.events[save.run.step];
-    if (event?.type === 'npc' && event.opened) {
-      const npc = narrative.events.npc[0] ?? { name: '떠돌이 감독관', emoji: '🧓' };
-      screen.append(panel(h('h2', {}, `${npc.emoji} ${npc.name}`), h('p', {}, event.text),
-        h('p', {}, '이 상황에 맞는 조문을 골라 주세요.'),
-        h('div', { className: 'choices' }, event.choices.map(value =>
-          button(citeLabel(value, articles, effectiveStats(save.hero).law, save.skills), () => answerQuiz(value))))));
-    }
   }
   if (page === 'battle' && save.run?.battle) {
     const state = save.run.battle;
-    if (!save.tutorialDone && !ended(state)) {
-      tutorialVisible = true;
-      save.tutorialDone = true;
-      persist();
-    }
-    screen = battle({ state, monster: monsterContent(monsters, state.event), bagOpen, articles, animate, previous, entering: focus && !animate, tutorial: tutorialVisible,
+    if (!state.ui || typeof state.ui !== 'object' || Array.isArray(state.ui)) state.ui = {};
+    battleView ??= { monster: monsterContent(monsters, state.event) };
+    screen = battle({ state, monster: battleView.monster, bagOpen, articles, animate, previous, entering: focus && !animate, tutorial: !save.tutorialDone,
+      presentation: state.ui, pending: Array.isArray(state.ui.messages) ? state.ui.messages : [],
+      onPresented: kind => {
+        if (kind === 'pending') state.ui.messages = [];
+        else state.ui[kind] = true;
+        if (kind === 'introDone') save.tutorialDone = true;
+        persist();
+      },
       onBag: () => { bagOpen = !bagOpen; render(false); }, onAction: act, onContinue: continueBattle, onArticle: showArticle,
       onExplain: () => showArticle(state.event.instance.article,
         [state.event.instance.why, state.event.instance.violation?.clauseNote, state.event.instance.violation?.rebuttal?.explain]
@@ -237,7 +240,7 @@ function render(focus = true, animate = false, previous = null) {
     } });
   if (page === 'story') screen = storyScreen({ title: storyId === 'boss_clear' ? '1장 클리어!' : '신입 감독관의 첫날',
     lines: narrative[storyId], teaser: storyId === 'boss_clear' ? narrative.chapter2_teaser : null, onDone: finishStory });
-  if (screen && page !== 'battle' && page !== 'town') screen = fitScreen(screen);
+  if (screen && !['battle', 'town', 'dungeon'].includes(page)) screen = fitScreen(screen);
   disposeScreen = screen?.dispose;
   const scene = page === 'story' ? storyId === 'boss_clear' ? 'victory' : 'story' :
     page === 'inn' && wasFaint || page === 'battle' && save.run?.battle?.phase === 'lost' ? 'faint' :

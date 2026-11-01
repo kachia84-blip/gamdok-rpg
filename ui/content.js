@@ -1,6 +1,10 @@
 const lines = (value, fallback) => Array.isArray(value) && value.length && value.every(x => typeof x === 'string') ? value : fallback;
 const text = (value, fallback) => typeof value === 'string' && value.trim() ? value : fallback;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+export const chooseLine = (values, fallback, random = Math.random) => {
+  const choices = Array.isArray(values) ? values.filter(value => typeof value === 'string' && value.trim()) : [];
+  return choices.length ? choices[Math.floor(random() * choices.length)] : fallback;
+};
 
 export function storyContent(raw) {
   const data = record(raw) ? raw : {};
@@ -9,6 +13,7 @@ export function storyContent(raw) {
   return {
     prologue: lines(data.prologue, ['지청에 오신 것을 환영합니다. 오늘부터 당신은 신입 감독관입니다.', '추락의 고층 빌딩에 수상한 그림자가 드리웠습니다. 조문과 관찰력으로 몬스터에 맞서 주세요.']),
     town: { greeting: lines(town.greeting, ['법전을 챙기셨나요? 출발 전에 지청에서 준비해 주세요.']),
+      chatter: lines(town.chatter, lines(town.greeting, ['법전을 챙기셨나요? 출발 전에 지청에서 준비해 주세요.'])),
       senior: Array.isArray(town.senior) ? town.senior.filter(s => record(s) && typeof s.id === 'string').map(s => ({ id: s.id, lines: lines(s.lines, ['상황을 살피고 알맞은 조문으로 맞서 주세요.']) })) : [],
       inn: lines(town.inn, ['숙직실의 불이 켜져 있습니다. 잠시 쉬어 가세요.']), shop: lines(town.shop, ['든든한 장비와 소모품을 준비해 주세요.']) },
     floors: Array.from({ length: 6 }, (_, index) => {
@@ -32,8 +37,9 @@ export function monsterContent(raw, event) {
   return { name: text(selected.name, event.boss ? '고층 빌딩의 그림자' : '현장의 망령'), emoji: text(selected.emoji, '🪖'),
     title: text(selected.title, event.boss ? '6층의 지배자' : ''),
     appear: text(event.boss ? boss.lines?.appear : source.appear, '여기까지 왔군!'),
-    taunt: text(source.taunt, '{situation}'),
-    hit: event.boss ? lines(boss.lines?.hit, ['제법이군!'])[0] : text(source.hit, '아직 끝나지 않았어!'),
+    taunt: chooseLine(selected.taunts ?? (event.boss ? boss.lines?.taunts : null), text(selected.taunt, text(source.taunt, '{situation}'))),
+    hits: lines(selected.hits, event.boss ? lines(boss.lines?.hits, lines(boss.lines?.hit, ['제법이군!'])) : [text(source.hit, '아직 끝나지 않았어!')]),
+    hit: chooseLine(selected.hits, event.boss ? chooseLine(boss.lines?.hits ?? boss.lines?.hit, '제법이군!') : text(source.hit, '아직 끝나지 않았어!')),
     defeat: text(event.boss ? boss.lines?.defeat : source.defeat, '이렇게 사라지다니…'),
     phantom: text(source.phantom, '들켰네. 난 환영이었어!') };
 }

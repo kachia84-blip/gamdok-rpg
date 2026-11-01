@@ -1,6 +1,8 @@
 import { h, button, heading } from './common.js';
 import { TOWN_MAP, TOWN_START, TOWN_BUILDINGS, findPath } from '../../core/townmap.js';
 import { reducedMotion, sfx } from '../fx.js';
+import { msgbox } from './msgbox.js';
+import { chooseLine } from '../content.js';
 
 export function town({ save, story, onEnter, onPage }) {
   let position = { ...TOWN_START };
@@ -47,9 +49,12 @@ export function town({ save, story, onEnter, onPage }) {
       dataset: { building: building.id }, title: '길을 따라 이동해서 들어가기' })));
   place(); map.append(player);
   const screen = h('div', { className: 'game-screen town-screen' }, heading('신입 감독관 RPG', '지청'),
-    h('div', { className: 'town-greeting' }, h('p', {}, story.town.greeting[0]),
-      h('p', { className: 'muted' }, `최고 도달 ${save.best.floor}층 · 습득 조문 ${save.skills.length}개`)),
-    h('p', { className: 'town-hint muted' }, '건물이나 길을 누르면 감독관이 걸어갑니다.'), map);
-  screen.dispose = () => { disposed = true; clearTimeout(timer); };
+    map);
+  const greeting = msgbox({ lines: [chooseLine(story.town.chatter, story.town.greeting[0])], speaker: '지청 주민',
+    onDone: () => { greeting.dispose(); overlay.hidden = true; overlay.replaceChildren(); map.inert = false; } });
+  const overlay = h('div', { className: 'message-overlay' }, greeting);
+  map.inert = true;
+  screen.append(overlay);
+  screen.dispose = () => { disposed = true; clearTimeout(timer); greeting.dispose(); };
   return screen;
 }
