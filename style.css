@@ -149,3 +149,6 @@ button.secondary{background:#1c253d;border-color:#687492;color:#f5efe0}
 @keyframes sparkle{0%,100%{transform:scale(.55) rotate(0);opacity:.35}50%{transform:scale(1.1) rotate(90deg);opacity:1}}
 @keyframes node-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.85);opacity:.5}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.hit-flash,.slash-light,.insight-wave,.damage-float,.hero-hit::after{display:none}.defeated .monster-sprite{opacity:.25}}
+/* 배터리·발열(ui/calm.js): 손 뗀 지 15초·화면 가려짐이면 반복 효과 일시정지, 배터리 20% 미만·충전 아님이면 반복 효과는 한 번만 */
+html[data-idle="1"] *,html[data-idle="1"] *::before,html[data-idle="1"] *::after{animation-play-state:paused!important}
+html[data-lowbat="1"] *,html[data-lowbat="1"] *::before,html[data-lowbat="1"] *::after{animation-iteration-count:1!important}
