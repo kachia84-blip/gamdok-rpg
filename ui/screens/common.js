@@ -12,9 +12,9 @@ export function fitScreen(screen) {
   screen.replaceChildren(header, h('div', { className: 'screen-content', tabIndex: 0, 'aria-label': '화면 내용' }, children), ...(action ? [action] : []));
   return screen;
 }
-export function sceneScreen(screen, scene) {
+export function sceneScreen(screen, scene, chapter = 1) {
   return h('div', { className: 'scene-screen' },
-    h('div', { className: 'scenery', dataset: { scene }, 'aria-hidden': true }), screen);
+    h('div', { className: 'scenery', dataset: { scene, chapter }, 'aria-hidden': true }), screen);
 }
 export function hpBar(hp, maxHp, label, previousHp = hp, previousMaxHp = maxHp) {
   const ratio = (value, max) => Math.max(0, Math.min(1, value / Math.max(1, max)));

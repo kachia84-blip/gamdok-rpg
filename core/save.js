@@ -8,7 +8,7 @@ const article = value => typeof value === 'string' && /^제\d+조$/.test(value);
 const id = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(value) && !['__proto__', 'constructor', 'prototype'].includes(value);
 
 export function emptySave() {
-  return { v: 4, hero: createHero(), skills: [], revived: [], best: { floor: 0 }, story: { seen: [] }, run: null };
+  return { v: 4, hero: createHero(), skills: [], revived: [], cleared: [], best: { floor: 0 }, story: { seen: [] }, run: null };
 }
 
 function validHero(hero) {
@@ -27,10 +27,11 @@ function validRebuttal(r) {
 }
 
 function validEvent(event) {
-  if (!record(event)) return false;
+  if (!record(event) || !integer(event.chapter === undefined ? 1 : event.chapter, 1, 3) ||
+      !integer(event.power === undefined ? 0 : event.power, 0, 20)) return false;
   if (event.type === 'battle') {
     const instance = event.instance;
-    return id(event.cardId) && integer(event.floor, 1, 6) && integer(event.lv, 1, 20) &&
+    return id(event.cardId) && integer(event.floor, 1, 6) && integer(event.lv, 1, 30) &&
       integer(event.maxHp, 1) && integer(event.attack, 1) && record(instance) && article(instance.article) &&
       typeof instance.text === 'string' && ['ok', 'violation'].includes(instance.kind) &&
       (event.v === null || Number.isFinite(event.v)) &&
@@ -56,7 +57,7 @@ function validBattle(battle, event) {
 }
 
 function validRun(run) {
-  return record(run) && integer(run.floor, 1, 6) && Array.isArray(run.events) && run.events.length === 3 &&
+  return record(run) && integer(run.chapter === undefined ? 1 : run.chapter, 1, 3) && integer(run.floor, 1, 6) && Array.isArray(run.events) && run.events.length === 3 &&
     run.events.every(validEvent) && integer(run.step, 0, run.events.length) &&
     (run.battle === null || run.step < run.events.length && validBattle(run.battle, run.events[run.step]));
 }
@@ -78,7 +79,16 @@ export function parseSave(text) {
     fresh.revived = Array.isArray(s.revived) ? s.revived.filter(r => record(r) && id(r.cardId) && (r.v === null || Number.isFinite(r.v))) : [];
     fresh.best.floor = integer(s.best?.floor, 0, 6) ? s.best.floor : 0;
     fresh.story.seen = Array.isArray(s.story?.seen) ? [...new Set(s.story.seen.filter(id))] : [];
+    fresh.cleared = Array.isArray(s.cleared) ? [...new Set(s.cleared.filter(n => integer(n, 1, 3)))] :
+      s.cleared === undefined && fresh.story.seen.includes('boss_clear') ? [1] : [];
     fresh.run = validRun(s.run) ? s.run : null;
+    if (fresh.run) {
+      fresh.run.chapter ??= 1;
+      for (const event of [...fresh.run.events, ...(fresh.run.battle ? [fresh.run.battle.event] : [])]) {
+        event.chapter ??= 1;
+        event.power ??= 0;
+      }
+    }
     if (fresh.run?.battle) { fresh.hero = fresh.run.battle.hero; fresh.skills = fresh.run.battle.skills; }
     return fresh;
   } catch { return emptySave(); }

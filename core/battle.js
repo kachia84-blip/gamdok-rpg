@@ -25,7 +25,8 @@ function counter(battle, multiplier = 1) {
 function win(battle, rng, phantom = false) {
   battle.phase = 'won';
   battle.monster.hp = 0;
-  const { floor, boss, instance } = battle.event;
+  const { boss, instance } = battle.event;
+  const floor = battle.event.floor + (battle.event.power ?? 0);
   const stats = effectiveStats(battle.hero);
   const exp = phantom ? 4 + floor * 2 : (10 + floor * 5) * (boss ? 3 : 1);
   const gold = phantom ? 0 : (6 + floor * 4 + stats.talk) * (boss ? 3 : 1);
@@ -35,7 +36,7 @@ function win(battle, rng, phantom = false) {
   if (learned) battle.skills.push(instance.article);
   let drop = null;
   if (!phantom && rng() < 0.25) {
-    const id = pick(rng, Object.keys(CONSUMABLES));
+    const id = pick(rng, Object.keys(CONSUMABLES).filter(id => CONSUMABLES[id].tier <= (battle.event.chapter ?? 1)));
     const next = grantItem(battle.hero, id);
     if (next !== battle.hero) { battle.hero = next; drop = id; }
   }

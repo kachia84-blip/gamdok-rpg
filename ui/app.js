@@ -1,7 +1,8 @@
 ﻿import { h, button } from './dom.js';
 import { emptySave, parseSave, STORAGE_KEY } from '../core/save.js';
 import { makeRng } from '../core/rng.js';
-import { allocatePoint, faint, heal, xpNeeded } from '../core/hero.js';
+import { allocatePoint, faint, heal, xpNeeded, GEAR } from '../core/hero.js';
+import { getChapter, unlockedChapters } from '../core/chapters.js';
 import { startDungeon, nextFloor, rememberWrong, rpgCards } from '../core/dungeon.js';
 import { startBattle, battleAction, ended } from '../core/battle.js';
 import { buy, stay, consume, CONSUMABLES } from '../core/shop.js';
@@ -30,6 +31,7 @@ let monsters = {};
 let narrative = storyContent(null);
 let page = 'story';
 let storyId = 'prologue';
+let storyReward = null;
 let levelReturn = 'town';
 let message = '';
 let wasFaint = false;
@@ -69,8 +71,14 @@ function showArticle(no, explanation = null) {
   dialog.showModal();
 }
 
-function enterDungeon() {
-  if (!save.run) save.run = startDungeon(cards, rng(), save.revived);
+function enterDungeon(chapter = 1) {
+  if (!save.run) {
+    if (!unlockedChapters(save.cleared).some(area => area.id === chapter)) return;
+    save.run = startDungeon(cards, rng(), save.revived, chapter);
+    if (chapter > 1 && !save.story.seen.includes(`ch${chapter}_intro`)) {
+      storyId = `ch${chapter}_intro`; navigate('story'); return;
+    }
+  }
   save.best.floor = Math.max(save.best.floor, save.run.floor);
   navigate(save.run.battle ? 'battle' : 'dungeon');
 }
@@ -156,7 +164,23 @@ function continueBattle() {
     return;
   }
   if (save.hero.points > 0) { levelReturn = 'battle'; navigate('levelup'); return; }
-  if (state.phase === 'won' && state.event.boss) { storyId = 'boss_clear'; navigate('story'); return; }
+  if (state.phase === 'won' && state.event.boss) {
+    const chapter = state.event.chapter ?? 1;
+    storyReward = state.ui?.chapterReward ?? null;
+    if (!save.cleared.includes(chapter)) {
+      save.cleared.push(chapter);
+      const id = chapter === 2 ? 'compass' : chapter === 3 ? 'badge' : null;
+      if (id) {
+        const item = GEAR[id];
+        save.hero = { ...save.hero, gear: { ...save.hero.gear, [item.slot]: id } };
+        state.hero = save.hero;
+        storyReward = `${item.name}을 받았습니다`;
+        state.ui = { ...state.ui, chapterReward: storyReward };
+      }
+    }
+    storyId = chapter === 1 ? 'boss_clear' : `ch${chapter}_clear`;
+    navigate('story'); return;
+  }
   if (state.phase === 'fled' && state.event.boss) { returnTown(); return; }
   save.run.step++;
   save.run.battle = null;
@@ -166,7 +190,14 @@ function continueBattle() {
 
 function finishStory() {
   markSeen(storyId);
-  if (storyId === 'boss_clear') { markSeen('chapter2_teaser'); save.run = null; }
+  if (/^ch[23]_intro$/.test(storyId)) {
+    save.best.floor = Math.max(save.best.floor, save.run.floor);
+    navigate('dungeon'); return;
+  }
+  if (storyId === 'boss_clear' || /^ch[23]_clear$/.test(storyId)) {
+    if (storyId === 'boss_clear') markSeen('chapter2_teaser');
+    save.run = null; storyReward = null; battleView = null;
+  }
   navigate('town');
 }
 
@@ -185,17 +216,22 @@ function render(focus = true, animate = false, previous = null) {
     h('div', { className: 'xp-track', role: 'progressbar', 'aria-label': '경험치', 'aria-valuemin': 0, 'aria-valuemax': xpNeeded(hero.lv), 'aria-valuenow': hero.exp,
       title: `경험치 ${hero.exp} / ${xpNeeded(hero.lv)}` },
     h('div', { className: 'xp-fill', style: `transform:scaleX(${Math.min(1, hero.exp / xpNeeded(hero.lv))})` })), soundButton);
+  const chapterLabel = document.querySelector('.brand span:last-child');
+  const currentChapter = getChapter(save.run?.chapter ?? 1);
+  if (chapterLabel) chapterLabel.textContent = `${currentChapter.id}장 · ${currentChapter.name}`;
   const common = { hero, save, story: narrative, articles, message, onTown: () => navigate('town') };
   let screen;
   if (page === 'town') screen = town({ ...common, onEnter: enterDungeon, onPage: navigate });
   if (page === 'dungeon' && save.run) {
-    screen = dungeon({ ...common, run: save.run, onEvent: openEvent, onTown: returnTown, onQuiz: answerQuiz,
+    const area = getChapter(save.run.chapter ?? 1);
+    screen = dungeon({ ...common, story: { ...narrative, floors: area.id === 1 ? narrative.floors : narrative.chapters[area.id].floors }, run: save.run, onEvent: openEvent, onTown: returnTown, onQuiz: answerQuiz,
       onFloorSeen: () => { save.run.uiSeenFloors = [...new Set([...(Array.isArray(save.run.uiSeenFloors) ? save.run.uiSeenFloors : []), save.run.floor])]; persist(); },
       onNext: () => {
         save.run = nextFloor(save.run, cards, rng());
         save.best.floor = Math.max(save.best.floor, save.run.floor);
         navigate('dungeon');
       } });
+    screen.querySelector('header').querySelector('p').textContent = `${area.id}장 · ${area.name}`;
   }
   if (page === 'battle' && save.run?.battle) {
     const state = save.run.battle;
@@ -220,7 +256,7 @@ function render(focus = true, animate = false, previous = null) {
     persist(); render(false);
   }, onDone: () => { if (!save.hero.points) navigate(levelReturn); } });
   if (page === 'shop') screen = shop({ ...common, onBuy: id => {
-    const result = buy(save.hero, id); save.hero = result.hero; message = result.message; persist(); render(false);
+    const result = buy(save.hero, id, save.cleared); save.hero = result.hero; message = result.message; persist(); render(false);
     if (result.ok) sfx('coin');
   } });
   if (page === 'inn') screen = inn({ ...common, wasFaint, onStay: () => {
@@ -238,15 +274,24 @@ function render(focus = true, animate = false, previous = null) {
       if (next === save.hero) return;
       save.hero = next; message = `${CONSUMABLES[id].name}를 사용하셨습니다.`; persist(); render(false); sfx('heal');
     } });
-  if (page === 'story') screen = storyScreen({ title: storyId === 'boss_clear' ? '1장 클리어!' : '신입 감독관의 첫날',
-    lines: narrative[storyId], teaser: storyId === 'boss_clear' ? narrative.chapter2_teaser : null, onDone: finishStory });
+  if (page === 'story') {
+    const chapter = /^ch([23])_/.exec(storyId)?.[1];
+    const clear = storyId === 'boss_clear' || /^ch[23]_clear$/.test(storyId);
+    screen = storyScreen({ title: clear ? `${chapter === '3' ? 'DLC · ' : ''}${chapter ?? 1}장 클리어!` :
+      chapter ? narrative.chapters[chapter].title : '신입 감독관의 첫날',
+      lines: narrative[storyId], reward: storyReward,
+      teaser: clear ? chapter ? narrative.chapters[chapter].teaser : narrative.chapter2_teaser : null,
+      teaserTitle: chapter === '3' ? '엔딩 뒷이야기' : `${chapter ? 3 : 2}장 예고`,
+      doneLabel: chapter && !clear ? '던전으로' : '지청으로', onDone: finishStory });
+  }
   if (screen && !['battle', 'town', 'dungeon'].includes(page)) screen = fitScreen(screen);
   disposeScreen = screen?.dispose;
-  const scene = page === 'story' ? storyId === 'boss_clear' ? 'victory' : 'story' :
+  const scene = page === 'story' ? storyId === 'boss_clear' || /^ch[23]_clear$/.test(storyId) ? 'victory' : 'story' :
     page === 'inn' && wasFaint || page === 'battle' && save.run?.battle?.phase === 'lost' ? 'faint' :
     ['battle', 'dungeon'].includes(page) && save.run ?
       page === 'battle' && save.run.battle?.event.boss ? 'boss' : `floor-${save.run.floor}` : 'town';
-  root.replaceChildren(sceneScreen(screen ?? h('p', {}, '마을로 이동해 주세요.'), scene));
+  root.replaceChildren(sceneScreen(screen ?? h('p', {}, '마을로 이동해 주세요.'), scene,
+    ['battle', 'dungeon'].includes(page) ? save.run?.chapter ?? 1 : 1));
   document.body.classList.toggle('in-battle', page === 'battle');
   if (focus) { window.scrollTo(0, 0); root.querySelector('h1')?.focus({ preventScroll: true }); }
 }
@@ -290,7 +335,9 @@ async function boot() {
     }
     catch { storageFailed = true; announce('저장소에 접근할 수 없습니다. 현재 창에서 진행해 주세요.'); }
     if (save.hero.hp === 0 && !save.run?.battle) { save.hero = faint(save.hero); wasFaint = true; }
-    page = !save.story.seen.includes('prologue') ? 'story' : save.run?.battle ? 'battle' : save.run ? 'dungeon' : wasFaint ? 'inn' : 'town';
+    const pendingIntro = save.run?.chapter > 1 && !save.story.seen.includes(`ch${save.run.chapter}_intro`);
+    if (pendingIntro) storyId = `ch${save.run.chapter}_intro`;
+    page = !save.story.seen.includes('prologue') || pendingIntro ? 'story' : save.run?.battle ? 'battle' : save.run ? 'dungeon' : wasFaint ? 'inn' : 'town';
     persist(); render(); offlineSetup();
   } catch {
     root.replaceChildren(sceneScreen(panel(h('h1', {}, '모험 자료를 불러오지 못했습니다'), h('p', {}, '카드 자료와 연결 상태를 확인하신 뒤 다시 시도해 주세요.'), button('재시도', boot, { className: 'primary full' })), 'story'));

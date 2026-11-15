@@ -1,10 +1,12 @@
 import { GEAR, heal } from './hero.js';
 
 export const CONSUMABLES = {
-  coffee: { name: '☕ 믹스커피', price: 10, hp: 15 },
-  tonic: { name: '🥤 박카스', price: 30, hp: 40 },
-  tape: { name: '📏 줄자', price: 25 },
-  notebook: { name: '📖 법전 수첩', price: 35 },
+  coffee: { name: '☕ 믹스커피', price: 10, hp: 15, tier: 1 },
+  tonic: { name: '🥤 박카스', price: 30, hp: 40, tier: 1 },
+  tape: { name: '📏 줄자', price: 25, tier: 1 },
+  notebook: { name: '📖 법전 수첩', price: 35, tier: 1 },
+  lunch: { name: '🍱 현장 도시락', price: 50, hp: 80, tier: 2 },
+  kit: { name: '🧰 응급 키트', price: 120, hp: 200, tier: 3 },
 };
 export const GOODS = { ...GEAR, ...CONSUMABLES };
 export const bagCount = hero => Object.values(hero.bag).reduce((sum, count) => sum + count, 0);
@@ -14,9 +16,12 @@ export function grantItem(hero, id) {
   return { ...hero, bag: { ...hero.bag, [id]: (hero.bag[id] ?? 0) + 1 } };
 }
 
-export function buy(hero, id) {
+export function buy(hero, id, cleared = []) {
   const item = Object.hasOwn(GOODS, id) ? GOODS[id] : null;
   if (!item) return { hero, ok: false, message: '상품을 확인해 주세요.' };
+  if (item.rare || item.tier > 1 && !cleared.includes(item.tier - 1)) {
+    return { hero, ok: false, message: `${item.tier - 1}장을 클리어하면 열립니다` };
+  }
   if (hero.gold < item.price) return { hero, ok: false, message: '골드가 부족합니다.' };
   if (item.slot && hero.gear[item.slot] === id) return { hero, ok: false, message: '이미 장착하고 계십니다.' };
   if (!item.slot && bagCount(hero) >= 10) return { hero, ok: false, message: '가방이 가득 찼습니다.' };

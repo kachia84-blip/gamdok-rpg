@@ -1,10 +1,18 @@
 export const GEAR = {
-  helmet: { name: '⛑️ 안전모', slot: 'head', defense: 1, price: 30 },
-  hardhat: { name: '🪖 고급 안전모', slot: 'head', defense: 3, price: 120 },
-  handbook: { name: '📕 산안법 해설서', slot: 'hand', law: 2, price: 50 },
-  cases: { name: '📚 판례집', slot: 'hand', law: 5, price: 200 },
-  flashlight: { name: '🔦 손전등', slot: 'tool', eye: 2, price: 40 },
-  meter: { name: '🔭 측정기 세트', slot: 'tool', eye: 4, price: 150 },
+  helmet: { name: '⛑️ 안전모', slot: 'head', defense: 1, price: 30, tier: 1 },
+  hardhat: { name: '🪖 고급 안전모', slot: 'head', defense: 3, price: 120, tier: 1 },
+  handbook: { name: '📕 산안법 해설서', slot: 'hand', law: 2, price: 50, tier: 1 },
+  cases: { name: '📚 판례집', slot: 'hand', law: 5, price: 200, tier: 1 },
+  flashlight: { name: '🔦 손전등', slot: 'tool', eye: 2, price: 40, tier: 1 },
+  meter: { name: '🔭 측정기 세트', slot: 'tool', eye: 4, price: 150, tier: 1 },
+  airmask: { name: '😷 송기마스크', slot: 'head', defense: 5, price: 300, tier: 2 },
+  guidebook: { name: '📘 고시·해석 모음', slot: 'hand', law: 8, price: 350, tier: 2 },
+  gasdetector: { name: '📟 가스농도 측정기', slot: 'tool', eye: 7, price: 320, tier: 2 },
+  insulated: { name: '🧤 절연 보호구 세트', slot: 'head', defense: 8, price: 600, tier: 3 },
+  rulings: { name: '⚖️ 대법원 판결집', slot: 'hand', law: 12, price: 700, tier: 3 },
+  thermal: { name: '📸 열화상 카메라', slot: 'tool', eye: 11, price: 650, tier: 3 },
+  compass: { name: '🧭 선배의 나침반', slot: 'tool', eye: 9, talk: 3, price: 0, tier: 2, rare: true },
+  badge: { name: '🏅 명예 감독관 배지', slot: 'head', defense: 7, law: 4, talk: 4, price: 0, tier: 3, rare: true },
 };
 
 export function createHero() {

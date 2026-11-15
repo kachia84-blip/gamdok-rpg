@@ -3,10 +3,21 @@ import { TOWN_MAP, TOWN_START, TOWN_BUILDINGS, findPath } from '../../core/townm
 import { reducedMotion, sfx } from '../fx.js';
 import { msgbox } from './msgbox.js';
 import { chooseLine } from '../content.js';
+import { unlockedChapters } from '../../core/chapters.js';
+import { chapters } from './chapters.js';
 
 export function town({ save, story, onEnter, onPage }) {
   let position = { ...TOWN_START };
   let walking = false, disposed = false, timer;
+  const enter = () => {
+    if (save.run || unlockedChapters(save.cleared).length === 1) { onEnter(1); return; }
+    const chooser = chapters({ cleared: save.cleared, onSelect: onEnter, onClose: () => {
+      overlay.hidden = true; overlay.replaceChildren(); map.inert = false;
+      map.querySelectorAll('button').forEach(item => { if (item.dataset.building === 'dungeon') item.focus({ preventScroll: true }); });
+    } });
+    greeting.dispose(); overlay.replaceChildren(chooser); overlay.hidden = false; map.inert = true;
+    chooser.querySelector('button')?.focus({ preventScroll: true });
+  };
   const player = h('span', { className: 'town-player', 'aria-hidden': true },
     h('span', { className: 'town-player-icon' }, '👷'));
   const map = h('nav', { className: 'town-menu town-map', 'aria-label': '지청 시설과 길 · 건물이나 길을 눌러 이동', dataset: { walking: 'false' } });
@@ -43,7 +54,7 @@ export function town({ save, story, onEnter, onPage }) {
   }));
   map.append(...TOWN_BUILDINGS.map(building => button(
     building.id === 'dungeon' && save.run ? '⚔️ 탐험 계속' : building.label,
-    () => move(building.door, () => building.id === 'dungeon' ? onEnter() : onPage(building.id)),
+    () => move(building.door, () => building.id === 'dungeon' ? enter() : onPage(building.id)),
     { className: `town-building tile-${building.id}${building.id === 'dungeon' ? ' primary' : ''}`,
       style: `grid-column:${building.x + 1}/span 3;grid-row:${building.y + 1}/span 2`,
       dataset: { building: building.id }, title: '길을 따라 이동해서 들어가기' })));
