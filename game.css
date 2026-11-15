@@ -105,6 +105,7 @@
 .sideview-stage .damage-float{top:42%}
 .battle-controls .rpg-msgbox{padding:26px 14px 24px;font-size:15px}
 .battle-controls .msgbox-text.victory-banner{display:inline;margin:0;padding:0;background:none;border:0;box-shadow:none;animation:none;white-space:pre-wrap;font-size:inherit;line-height:inherit}
+.rpg-msgbox .msgbox-text.victory-banner::before,.rpg-msgbox .msgbox-text.victory-banner::after{content:none}
 .town-screen{position:relative}
 .message-overlay{position:absolute;z-index:5;left:4px;right:4px;bottom:6px;height:clamp(116px,26%,164px)}
 .message-overlay[hidden]{display:none}
