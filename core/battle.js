@@ -26,7 +26,8 @@ function counter(battle, multiplier = 1) {
     log(battle, '🛡️ 반격을 막아 냈습니다!');
     return;
   }
-  const damage = Math.max(1, Math.round(battle.monster.attack * multiplier * ((battle.relics ?? []).includes('dice') ? 1.3 : 1)) - statsOf(battle).defense);
+  const damage = Math.max(1, Math.round(battle.monster.attack * multiplier * ((battle.relics ?? []).includes('dice') ? 1.3 : 1) *
+    ((battle.relics ?? []).includes('vow') ? 1.3 : 1)) - statsOf(battle).defense);
   battle.hero.hp = Math.max(0, battle.hero.hp - damage);
   battle.effect = { target: 'hero', damage };
   log(battle, `반격! HP가 ${damage} 줄었습니다.`);

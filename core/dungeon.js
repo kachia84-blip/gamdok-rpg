@@ -16,6 +16,8 @@ export const MODS = {
   calm: { label: '한적한 층(쉼터·상자)' },
 };
 export const MAX_FLOOR = 999;
+// 함정을 알아챌 확률: 관찰력이 높을수록 잘 피합니다.
+export const trapChance = eye => Math.min(0.9, 0.3 + eye * 0.04);
 export const rpgCards = cards => cards.filter(card => AREAS.some(chapter => chapter.fields.includes(card.field)));
 
 export function encounter(card, floor, rng, { revived, boss = false, cards = [], chapter = 1, site, danger = false, elite = false } = {}) {
@@ -45,7 +47,7 @@ export function encounter(card, floor, rng, { revived, boss = false, cards = [],
     ...(affix ? { affix } : {}), ...(area.endless ? { site: site ?? 1 } : {}), ...(danger && !boss ? { danger: true } : {}), ...(elite ? { elite: true } : {}) };
 }
 
-export function generateFloor(cards, floor, rng, revived = [], chapter = 1, site, mod = 'normal') {
+export function generateFloor(cards, floor, rng, revived = [], chapter = 1, site, mod = 'normal', wanted = null) {
   const area = getChapter(chapter);
   const pool = chapterCards(cards, area.id);
   if (!pool.length) throw new Error('전투 카드가 없습니다.');
@@ -58,9 +60,12 @@ export function generateFloor(cards, floor, rng, revived = [], chapter = 1, site
   if (!area.endless || bossFloor || !Object.hasOwn(MODS, mod)) mod = 'normal';
   // 정예: 합친 던전의 3·9·15…층 첫 전투. 공격이 거세고, 이기면 보상 2배와 유물을 줍니다.
   const eliteFloor = !!area.endless && at % BOSS_EVERY === 3;
+  // 현상수배: 오늘의 수배 몬스터가 30% 확률로 이 층에 나타납니다(정예 자리는 피합니다).
+  const hunted = area.endless && wanted && !bossFloor ? pool.find(c => c.id === wanted) : null;
+  const hunt = !!hunted && rng() < 0.3;
   const fights = [0, 1].map(index => {
     const memory = returning[index];
-    const card = memory ? pool.find(c => c.id === memory.cardId) : pick(rng, pool);
+    const card = memory ? pool.find(c => c.id === memory.cardId) : hunt && index === (eliteFloor ? 1 : 0) ? hunted : pick(rng, pool);
     return encounter(card, at, rng, { revived: memory, boss: bossFloor && index === 1, cards: pool, chapter: area.id, site, danger: mod === 'danger',
       elite: eliteFloor && index === 0 && !memory });
   });
@@ -76,15 +81,15 @@ export function generateFloor(cards, floor, rng, revived = [], chapter = 1, site
   // 한적한 층: 전투는 한 번뿐이고 쉼터와 상자가 나옵니다.
   if (mod === 'calm') return [side('rest'), fights[0], side('chest')];
   // 합친 던전에는 제단과 동전 던지기가 더 나옵니다.
-  return [fights[0], side(pick(rng, area.endless ? ['chest', 'rest', 'npc', 'altar', 'gamble', 'merchant'] : ['chest', 'rest', 'npc'])), fights[1]];
+  return [fights[0], side(pick(rng, area.endless ? ['chest', 'rest', 'npc', 'altar', 'gamble', 'merchant', 'trap'] : ['chest', 'rest', 'npc'])), fights[1]];
 }
 
-export function startDungeon(cards, rng, revived = [], chapter = 1, startFloor = 1) {
+export function startDungeon(cards, rng, revived = [], chapter = 1, startFloor = 1, wanted = null) {
   const area = getChapter(chapter);
   chapter = area.id;
   const floor = area.endless ? Math.max(1, Math.min(MAX_FLOOR, Math.floor(startFloor) || 1)) : 1;
-  return { chapter, floor, step: 0, events: generateFloor(cards, floor, rng, revived, chapter), battle: null,
-    relics: [], relicOffer: null, combo: 0, paths: null, wins: 0 };
+  return { chapter, floor, step: 0, events: generateFloor(cards, floor, rng, revived, chapter, undefined, 'normal', wanted), battle: null,
+    relics: [], relicOffer: null, combo: 0, paths: null, wins: 0, boonOffer: null };
 }
 
 // 층을 다 돌면 다음 층 두 갈래를 내밉니다. 다음이 보스 층이면 갈림길이 없습니다.
@@ -95,12 +100,12 @@ export function offerPaths(run, rng) {
   return { ...run, paths: [{ site: site(), mod: 'normal' }, { site: site(), mod: rng() < 0.5 ? 'danger' : 'calm' }] };
 }
 
-export function nextFloor(run, cards, rng, pathIndex = 0) {
+export function nextFloor(run, cards, rng, pathIndex = 0, wanted = null) {
   const chapter = run.chapter ?? 1;
   if (run.step < run.events.length || run.floor >= (getChapter(chapter).endless ? MAX_FLOOR : 6)) return run;
   const path = run.paths?.[pathIndex] ?? run.paths?.[0];
-  return { chapter, floor: run.floor + 1, step: 0, events: generateFloor(cards, run.floor + 1, rng, [], chapter, path?.site, path?.mod), battle: null, paths: null,
-    relics: run.relics ?? [], relicOffer: null, ...(run.relicFloor ? { relicFloor: run.relicFloor } : {}), combo: run.combo ?? 0, wins: run.wins ?? 0 };
+  return { chapter, floor: run.floor + 1, step: 0, events: generateFloor(cards, run.floor + 1, rng, [], chapter, path?.site, path?.mod, wanted), battle: null, paths: null,
+    relics: run.relics ?? [], relicOffer: null, ...(run.relicFloor ? { relicFloor: run.relicFloor } : {}), combo: run.combo ?? 0, wins: run.wins ?? 0, ...(run.record ? { record: true } : {}) };
 }
 
 export function rememberWrong(revived, battle) {

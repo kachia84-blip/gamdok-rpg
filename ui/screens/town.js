@@ -6,7 +6,7 @@ import { chooseLine } from '../content.js';
 import { startFloors } from '../../core/chapters.js';
 import { chapters } from './chapters.js';
 
-export function town({ save, story, onEnter, onPage, message, extra }) {
+export function town({ save, story, onEnter, onPage, message, extra, extra2 }) {
   let position = { ...TOWN_START };
   let walking = false, disposed = false, timer;
   const enter = () => {
@@ -61,7 +61,7 @@ export function town({ save, story, onEnter, onPage, message, extra }) {
   place(); map.append(player);
   const screen = h('div', { className: 'game-screen town-screen' }, heading('신입 감독관 RPG', '지청'),
     map);
-  const greeting = msgbox({ lines: [message || chooseLine(story.town.chatter, story.town.greeting[0]), ...(extra ? [extra] : [])], speaker: message ? '알림' : '지청 주민',
+  const greeting = msgbox({ lines: [message || chooseLine(story.town.chatter, story.town.greeting[0]), ...[extra, extra2].filter(Boolean)], speaker: message ? '알림' : '지청 주민',
     onDone: () => { greeting.dispose(); overlay.hidden = true; overlay.replaceChildren(); map.inert = false; } });
   const overlay = h('div', { className: 'message-overlay' }, greeting);
   map.inert = true;

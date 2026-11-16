@@ -4,17 +4,18 @@ import { effectiveStats } from '../../core/hero.js';
 import { citeLabel } from '../../core/reveal.js';
 import { RELICS, merchantPrice, healPrice } from '../../core/relics.js';
 import { MODS } from '../../core/dungeon.js';
+import { BOONS } from '../../core/boons.js';
 import { getChapter, BOSS_EVERY } from '../../core/chapters.js';
 
 const SITE_ICON = { 1: '🏢', 2: '🕳️', 3: '🏭' };
 const MOD_ICON = { danger: '⚠️', calm: '🌿' };
 const SIDE_TEXT = { altar: '낡은 제단이 희미하게 빛나고 있습니다.', gamble: '누군가 동전을 튕기며 내기를 청합니다.',
-  merchant: '짐을 잔뜩 멘 상인이 손짓합니다.' };
+  merchant: '짐을 잔뜩 멘 상인이 손짓합니다.', trap: '바닥 한쪽이 어딘가 수상합니다.' };
 
-export function dungeon({ run, story, hero, save, articles, onEvent, onNext, onTown, onQuiz, onFloorSeen, message, floorInfo, endless = false, onRelic, onSide }) {
+export function dungeon({ run, story, hero, save, articles, onEvent, onNext, onTown, onQuiz, onFloorSeen, message, floorInfo, endless = false, onRelic, onSide, onBoon }) {
   const floor = floorInfo ?? story.floors[run.floor - 1];
   const event = run.events[run.step];
-  const names = { battle: '몬스터', chest: '보물상자', rest: '쉼터', npc: '떠돌이 감독관', altar: '수상한 제단', gamble: '동전 던지기', merchant: '떠돌이 상인' };
+  const names = { battle: '몬스터', chest: '보물상자', rest: '쉼터', npc: '떠돌이 감독관', altar: '수상한 제단', gamble: '동전 던지기', merchant: '떠돌이 상인', trap: '수상한 바닥' };
   const turn = run.floor + run.step;
   const line = list => list[turn % list.length];
   const path = h('ol', { className: 'event-path', 'aria-label': '탐험 경로' }, run.events.map((item, index) =>
@@ -22,7 +23,10 @@ export function dungeon({ run, story, hero, save, articles, onEvent, onNext, onT
       `${index + 1}. ${item.boss ? '보스' : item.elite ? '정예' : names[item.type]}${index < run.step ? ' · 완료' : ''}`)));
   const info = [run.combo >= 2 && `🔥 ${run.combo}연속`, (run.relics ?? []).map(id => RELICS[id]?.name.split(' ')[0]).join('')].filter(Boolean).join(' · ');
   const card = h('section', { className: 'dungeon-card panel', 'aria-label': '현재 칸' });
-  if (run.relicOffer?.length) {
+  if (run.boonOffer?.length) {
+    card.append(h('h2', {}, '🎒 출발 선물을 하나 고르세요'), h('div', { className: 'relic-choices' }, run.boonOffer.map(id =>
+      button(`${BOONS[id].name} · ${BOONS[id].desc}`, () => onBoon(id), { className: 'full' }))));
+  } else if (run.relicOffer?.length) {
     card.append(h('h2', {}, '🎁 유물을 하나 고르세요'), h('div', { className: 'relic-choices' }, run.relicOffer.map(id =>
       button(`${RELICS[id].name} · ${RELICS[id].desc}`, () => onRelic(id), { className: 'full' }))));
   } else if (!event) {

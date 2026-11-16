@@ -1,10 +1,11 @@
 ﻿import { h, button } from './dom.js';
 import { emptySave, parseSave, STORAGE_KEY } from '../core/save.js';
 import { makeRng } from '../core/rng.js';
-import { allocatePoint, faint, heal, xpNeeded, GEAR } from '../core/hero.js';
+import { allocatePoint, faint, heal, xpNeeded, GEAR, effectiveStats } from '../core/hero.js';
 import { getChapter, startFloors, TOWER, BOSS_EVERY } from '../core/chapters.js';
-import { startDungeon, nextFloor, rememberWrong, rpgCards, AFFIXES, offerPaths } from '../core/dungeon.js';
-import { todayKey, questFor, dailyState, progressQuest, streakBonus } from '../core/quests.js';
+import { startDungeon, nextFloor, rememberWrong, rpgCards, AFFIXES, offerPaths, trapChance } from '../core/dungeon.js';
+import { offerBoons, applyBoon, BOONS } from '../core/boons.js';
+import { todayKey, questFor, dailyState, progressQuest, streakBonus, wantedState, WANTED_GOLD } from '../core/quests.js';
 import { RELICS, offerRelics, chooseRelic, forceOffer, merchantStock, merchantPrice, healPrice } from '../core/relics.js';
 import { canChooseJob, chooseJob } from '../core/jobs.js';
 import { claimMedals } from '../core/medals.js';
@@ -21,7 +22,7 @@ import { inn } from './screens/inn.js';
 import { senior } from './screens/senior.js';
 import { skillbook } from './screens/skillbook.js';
 import { status as statusScreen } from './screens/status.js';
-import { dex as dexScreen } from './screens/dex.js';
+import { dex as dexScreen, FIELD } from './screens/dex.js';
 import { story as storyScreen } from './screens/story.js';
 import { article } from './screens/article.js';
 import { hpBar, panel, fitScreen, sceneScreen } from './screens/common.js';
@@ -95,12 +96,22 @@ function quest(type, value = 1) {
   notice = [notice, `📋 오늘의 의뢰 「${result.quest.text}」 완료 · ${result.gold}G${result.daily.streak >= 2 ? ` · ${result.daily.streak}일 연속!` : ''}`].filter(Boolean).join(' ');
 }
 
+// 오늘의 현상수배를 최신으로 맞추고, 아직 못 잡았으면 그 카드 번호를 돌려줍니다.
+function huntTarget() {
+  save.wanted = wantedState(save.wanted, todayKey(), cards, save.dex);
+  return save.wanted && !save.wanted.done ? save.wanted.cardId : null;
+}
+const wantedLabel = () => {
+  const card = cards.find(item => item.id === save.wanted?.cardId);
+  return card ? `${FIELD[card.field] ?? '기타'} ${card.article}` : '';
+};
+
 // 층의 마지막 칸을 넘겼을 때: 탑 기록, 유물 내밀기, 훈장 확인.
 function floorDone() {
   const run = save.run;
   if (!run || run.step < run.events.length) return;
   const area = getChapter(run.chapter ?? 1);
-  if (area.endless) save.best.tower = Math.max(save.best.tower, run.floor);
+  if (area.endless && run.floor > save.best.tower) { save.best.tower = run.floor; run.record = true; }
   save.run = offerPaths(offerRelics(run, rng(), !!area.endless), rng());
   quest('floors');
   awardMedals();
@@ -115,7 +126,8 @@ function showArticle(no, explanation = null) {
 function enterDungeon(startFloor = 1) {
   if (!save.run) {
     if (!startFloors(save.cleared).includes(startFloor)) return;
-    save.run = startDungeon(cards, rng(), save.revived, TOWER.id, startFloor);
+    save.run = startDungeon(cards, rng(), save.revived, TOWER.id, startFloor, huntTarget());
+    save.run.boonOffer = offerBoons(rng());
   }
   save.best.floor = Math.max(save.best.floor, save.run.floor);
   navigate(save.run.battle ? 'battle' : 'dungeon');
@@ -125,7 +137,7 @@ function enterDungeon(startFloor = 1) {
 function summarize() {
   const run = save.run;
   if (!run || !(run.wins > 0 || run.step > 0)) return;
-  notice = [notice, `🧾 이번 탐험: ${run.floor}층 · ${run.wins ?? 0}승 · 유물 ${(run.relics ?? []).length}개`].filter(Boolean).join(' ');
+  notice = [notice, `🧾 이번 탐험: ${run.floor}층 · ${run.wins ?? 0}승 · 유물 ${(run.relics ?? []).filter(id => !RELICS[id]?.curse).length}개${run.record ? ' · 🏆 신기록!' : ''}`].filter(Boolean).join(' ');
 }
 
 function returnTown() {
@@ -156,6 +168,17 @@ function openEvent() {
     message = `보물상자에서 ${event.gold * magnet}G를 얻으셨습니다.`;
     run.step++;
     sfx('coin');
+  }
+  if (event.type === 'trap') {
+    if (rng()() < trapChance(effectiveStats(save.hero, run.relics ?? []).eye)) {
+      save.hero = { ...save.hero, gold: save.hero.gold + event.gold };
+      message = `함정을 알아채고 피했습니다! 숨겨진 ${event.gold}G도 찾았습니다.`; sfx('coin');
+    } else {
+      const damage = Math.min(Math.max(0, save.hero.hp - 1), event.hp);
+      save.hero = { ...save.hero, hp: save.hero.hp - damage };
+      message = `함정에 걸렸습니다! HP가 ${damage} 줄었습니다. 관찰력이 높을수록 잘 피합니다.`; sfx('miss');
+    }
+    run.step++;
   }
   if (event.type === 'rest') {
     const before = save.hero.hp;
@@ -246,6 +269,13 @@ function act(action) {
       save.stats.wins++;
       save.run.wins = (save.run.wins ?? 0) + 1;
       if (next.event.elite) save.stats.elites++;
+      if (save.wanted && !save.wanted.done && save.wanted.date === todayKey() && save.wanted.cardId === next.event.cardId) {
+        save.wanted = { ...save.wanted, done: true };
+        save.stats.wanted++;
+        save.hero = { ...save.hero, gold: save.hero.gold + WANTED_GOLD };
+        save.run.battle.hero = save.hero;
+        notice = [notice, `🎯 현상수배 해결! ${WANTED_GOLD}G를 받았습니다.`].filter(Boolean).join(' ');
+      }
       if (next.event.instance.kind === 'ok') save.stats.phantoms++;
       save.run.combo = next.combo ?? 0;
       save.stats.maxCombo = Math.max(save.stats.maxCombo, save.run.combo);
@@ -355,9 +385,10 @@ function render(focus = true, animate = false, previous = null) {
   const common = { hero, save, story: narrative, articles, message, onTown: () => navigate('town') };
   let screen;
   if (page === 'town') {
-    const today = questFor(todayKey()), daily = dailyState(save.daily, todayKey());
+    const today = questFor(todayKey()), daily = dailyState(save.daily, todayKey()), target = huntTarget();
     screen = town({ ...common, onEnter: enterDungeon, onPage: navigate,
-      extra: !daily.done && !questShown ? `📋 오늘의 의뢰: ${today.text} (${daily.progress}/${today.goal}) · 보상 ${Math.round(today.gold * streakBonus(daily.streak))}G${daily.streak ? ` · ${daily.streak}일 연속 중` : ''}` : null });
+      extra: !daily.done && !questShown ? `📋 오늘의 의뢰: ${today.text} (${daily.progress}/${today.goal}) · 보상 ${Math.round(today.gold * streakBonus(daily.streak))}G${daily.streak ? ` · ${daily.streak}일 연속 중` : ''}` : null,
+      extra2: target && !questShown ? `🎯 오늘의 현상수배: ${wantedLabel()} 몬스터 · ${WANTED_GOLD}G` : null });
     questShown = true;
   }
   if (page === 'dungeon' && save.run) {
@@ -368,11 +399,17 @@ function render(focus = true, animate = false, previous = null) {
       endless: !!area.endless,
       floorInfo: area.endless ? { ...floorBase, name: `${save.run.floor}층 · ${floorBase.name.replace(/^\d+층 · /, '')}` } : floorBase,
       onRelic: id => { save.run = chooseRelic(save.run, id); sfx('coin'); persist(); render(false); },
+      onBoon: id => {
+        const picked = applyBoon(save.run, save.hero, id, rng());
+        if (picked.run === save.run) return;
+        save.run = picked.run; save.hero = picked.hero;
+        message = `${BOONS[id].name}: ${BOONS[id].desc}`; sfx(id === 'breakfast' ? 'heal' : 'coin'); persist(); render(false);
+      },
       onFloorSeen: () => { save.run.uiSeenFloors = [...new Set([...(Array.isArray(save.run.uiSeenFloors) ? save.run.uiSeenFloors : []), save.run.floor])]; persist(); },
       onSide: answerSide,
       onNext: (index = 0) => {
         if ((save.run.relics ?? []).includes('battery')) save.hero = heal(save.hero, 10);
-        save.run = nextFloor(save.run, cards, rng(), Number.isInteger(index) ? index : 0);
+        save.run = nextFloor(save.run, cards, rng(), Number.isInteger(index) ? index : 0, huntTarget());
         save.best.floor = Math.max(save.best.floor, save.run.floor);
         navigate('dungeon');
       } });
@@ -388,6 +425,7 @@ function render(focus = true, animate = false, previous = null) {
         battleView.monster.name = `${affix.label} ${battleView.monster.name}`;
         battleView.monster.appear = `[${affix.label}] ${affix.desc}! ${battleView.monster.appear}`;
       }
+      if (save.wanted && !save.wanted.done && save.wanted.cardId === state.event.cardId) battleView.monster.appear = `[🎯 현상수배] 이기면 ${WANTED_GOLD}G! ${battleView.monster.appear}`;
       if (state.event.elite) {
         battleView.monster.name = `정예 ${battleView.monster.name}`;
         battleView.monster.appear = `[정예] 공격이 거세지만 보상 2배, 이기면 유물! ${battleView.monster.appear}`;
@@ -437,7 +475,7 @@ function render(focus = true, animate = false, previous = null) {
       if (next === save.hero) return;
       save.hero = next; message = `${CONSUMABLES[id].name}를 사용하셨습니다.`; persist(); render(false); sfx('heal');
     } });
-  if (page === 'dex') screen = dexScreen({ cards, seen: save.dex, onArticle: showArticle, onBack: () => navigate('status'),
+  if (page === 'dex') screen = dexScreen({ cards, seen: save.dex, wanted: huntTarget(), onArticle: showArticle, onBack: () => navigate('status'),
     lookup: card => monsterContent(monsters, { cardId: card.id, chapter: TOWER.id, floor: 1 }) });
   if (page === 'story') {
     const chapter = /^ch([234])_/.exec(storyId)?.[1];

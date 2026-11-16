@@ -10,6 +10,7 @@ export const MEDALS = [
   { id: 'dex30', name: '현장 백과', hint: '도감 30종 채우기', gold: 300, test: s => s.dex.length >= 30 },
   { id: 'elite5', name: '정예 사냥꾼', hint: '정예 5마리 격파', gold: 200, test: s => s.stats.elites >= 5 },
   { id: 'streak3', name: '성실한 감독관', hint: '의뢰 3일 연속 완료', gold: 200, test: s => (s.daily?.streak ?? 0) >= 3 },
+  { id: 'wanted5', name: '현상금 사냥꾼', hint: '현상수배 5번 해결', gold: 300, test: s => s.stats.wanted >= 5 },
   { id: 'tower10', name: '깊은 곳의 전설', hint: '던전 20층 돌파', gold: 500, test: s => s.best.tower >= 20 },
 ];
 export const validMedal = id => MEDALS.some(medal => medal.id === id);

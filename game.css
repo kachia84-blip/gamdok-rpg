@@ -109,7 +109,7 @@
 .town-screen{position:relative}
 .message-overlay{position:absolute;z-index:5;left:4px;right:4px;bottom:6px;height:clamp(116px,26%,164px)}
 .message-overlay[hidden]{display:none}
-.dungeon-screen{display:grid;grid-template-rows:auto minmax(0,1fr) 36% auto;gap:8px}
+.dungeon-screen{display:grid;grid-template-rows:auto minmax(0,1fr) minmax(36%,auto) auto;gap:8px}
 .dungeon-route{min-height:0;display:grid;align-items:center;overflow:hidden}
 .dungeon-route .event-path{margin:0}
 .dungeon-card{min-height:0;height:100%;margin:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}

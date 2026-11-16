@@ -17,9 +17,13 @@ export const RELICS = {
   // 양날 유물: 좋은 점과 나쁜 점이 함께 옵니다.
   dice: { name: '🎲 주사위', desc: '전투 골드 2배, 대신 받는 피해 1.3배' },
   hourglass: { name: '⏳ 모래시계', desc: '경험치 1.5배, 대신 도망칠 수 없습니다' },
+  // 저주: 출발 선물 '고행의 맹세'로만 붙고, 보상으로는 나오지 않습니다.
+  vow: { name: '🔥 고행의 맹세', desc: '받는 피해 1.3배', curse: true },
 };
 export const validRelics = list => Array.isArray(list) && list.length <= Object.keys(RELICS).length &&
   list.every(id => Object.hasOwn(RELICS, id)) && new Set(list).size === list.length;
+
+const unowned = run => Object.keys(RELICS).filter(id => !RELICS[id].curse && !(run.relics ?? []).includes(id));
 
 function shuffled(rng, items) {
   const list = [...items];
@@ -31,21 +35,20 @@ function shuffled(rng, items) {
 export function offerRelics(run, rng, endless = false) {
   if (run.step < run.events.length || run.relicFloor === run.floor || run.relicOffer?.length) return run;
   if (endless ? run.floor % 2 === 0 : run.floor >= 6) return run;
-  const owned = run.relics ?? [];
-  const rest = Object.keys(RELICS).filter(id => !owned.includes(id));
+  const rest = unowned(run);
   if (!rest.length) return run;
   return { ...run, relicOffer: shuffled(rng, rest).slice(0, 3) };
 }
 
 // 제단처럼 층 도중에 내미는 유물. 남은 유물이 없으면 그대로 돌려줍니다.
 export function forceOffer(run, rng) {
-  const rest = Object.keys(RELICS).filter(id => !(run.relics ?? []).includes(id));
+  const rest = unowned(run);
   return rest.length ? { ...run, relicOffer: shuffled(rng, rest).slice(0, 3) } : run;
 }
 
 // 떠돌이 상인: 아직 없는 유물 하나를 골드로 팝니다. 남은 유물이 없으면 null.
 export function merchantStock(run, rng) {
-  const rest = Object.keys(RELICS).filter(id => !(run.relics ?? []).includes(id));
+  const rest = unowned(run);
   return rest.length ? shuffled(rng, rest)[0] : null;
 }
 export const merchantPrice = event => 30 + event.gold * 3;

@@ -15,6 +15,18 @@ export function questFor(key) {
   return QUESTS[sum % QUESTS.length];
 }
 
+// 오늘의 현상수배: 날짜마다 아직 도감에 없는 몬스터 하나를 지목합니다. 이기면 골드를 받습니다.
+export const WANTED_GOLD = 150;
+export function wantedState(wanted, key, cards, dex = []) {
+  if (wanted?.date === key && cards.some(card => card.id === wanted.cardId)) return wanted;
+  const fresh = cards.filter(card => !dex.includes(card.id));
+  const pool = fresh.length ? fresh : cards;
+  if (!pool.length) return null;
+  let sum = 7;
+  for (const ch of key) sum = (sum * 37 + ch.charCodeAt(0)) % 9973;
+  return { date: key, cardId: pool[sum % pool.length].id, done: false };
+}
+
 // 날짜가 바뀌면 새 의뢰로 갈아 끼웁니다.
 // 어제 의뢰를 끝냈다면 연속 일수(streak)를 이어 갑니다.
 const dayAfter = key => { const [y, m, d] = key.split('-').map(Number); return todayKey(new Date(y, m - 1, d + 1)); };
