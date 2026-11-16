@@ -149,3 +149,8 @@
 .status-bag .shop-row p{font-size:11px}
 .status-bag .shop-row button{min-width:34px;min-height:32px;padding:3px;font-size:11px}
 .status-screen [role="status"]{font-size:11px;margin:3px 0}
+.run-info{margin:3px 0 0;font-size:12px;line-height:1.3;text-align:center}
+.relic-choices{display:flex;flex-direction:column;gap:6px}
+.relic-choices button{white-space:normal;min-height:38px;padding:5px 8px;font-size:12px;line-height:1.35}
+.job-screen .stat-row small{display:block;font-size:11px;line-height:1.35}
+.job-screen .stat-row button{flex-shrink:0;min-width:56px;white-space:nowrap}

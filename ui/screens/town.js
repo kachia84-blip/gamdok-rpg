@@ -6,12 +6,12 @@ import { chooseLine } from '../content.js';
 import { unlockedChapters } from '../../core/chapters.js';
 import { chapters } from './chapters.js';
 
-export function town({ save, story, onEnter, onPage }) {
+export function town({ save, story, onEnter, onPage, message }) {
   let position = { ...TOWN_START };
   let walking = false, disposed = false, timer;
   const enter = () => {
     if (save.run || unlockedChapters(save.cleared).length === 1) { onEnter(1); return; }
-    const chooser = chapters({ cleared: save.cleared, onSelect: onEnter, onClose: () => {
+    const chooser = chapters({ cleared: save.cleared, tower: save.best.tower ?? 0, onSelect: onEnter, onClose: () => {
       overlay.hidden = true; overlay.replaceChildren(); map.inert = false;
       map.querySelectorAll('button').forEach(item => { if (item.dataset.building === 'dungeon') item.focus({ preventScroll: true }); });
     } });
@@ -61,7 +61,7 @@ export function town({ save, story, onEnter, onPage }) {
   place(); map.append(player);
   const screen = h('div', { className: 'game-screen town-screen' }, heading('신입 감독관 RPG', '지청'),
     map);
-  const greeting = msgbox({ lines: [chooseLine(story.town.chatter, story.town.greeting[0])], speaker: '지청 주민',
+  const greeting = msgbox({ lines: [message || chooseLine(story.town.chatter, story.town.greeting[0])], speaker: message ? '알림' : '지청 주민',
     onDone: () => { greeting.dispose(); overlay.hidden = true; overlay.replaceChildren(); map.inert = false; } });
   const overlay = h('div', { className: 'message-overlay' }, greeting);
   map.inert = true;

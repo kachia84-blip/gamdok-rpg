@@ -3,7 +3,10 @@ import { emptySave, parseSave, STORAGE_KEY } from '../core/save.js';
 import { makeRng } from '../core/rng.js';
 import { allocatePoint, faint, heal, xpNeeded, GEAR } from '../core/hero.js';
 import { getChapter, unlockedChapters } from '../core/chapters.js';
-import { startDungeon, nextFloor, rememberWrong, rpgCards } from '../core/dungeon.js';
+import { startDungeon, nextFloor, rememberWrong, rpgCards, AFFIXES } from '../core/dungeon.js';
+import { offerRelics, chooseRelic } from '../core/relics.js';
+import { canChooseJob, chooseJob } from '../core/jobs.js';
+import { claimMedals } from '../core/medals.js';
 import { startBattle, battleAction, ended } from '../core/battle.js';
 import { buy, stay, consume, CONSUMABLES } from '../core/shop.js';
 import { storyContent, monsterContent, chooseLine } from './content.js';
@@ -11,6 +14,7 @@ import { town } from './screens/town.js';
 import { dungeon } from './screens/dungeon.js';
 import { battle } from './screens/battle.js';
 import { levelup } from './screens/levelup.js';
+import { job as jobScreen } from './screens/job.js';
 import { shop } from './screens/shop.js';
 import { inn } from './screens/inn.js';
 import { senior } from './screens/senior.js';
@@ -34,6 +38,7 @@ let storyId = 'prologue';
 let storyReward = null;
 let levelReturn = 'town';
 let message = '';
+let notice = '';
 let wasFaint = false;
 let bagOpen = false;
 let storageFailed = false;
@@ -55,7 +60,9 @@ function persist() {
 
 function navigate(next) {
   page = next;
-  message = '';
+  // 훈장 같은 알림은 던전이나 마을에 돌아왔을 때 한 번 보여 줍니다.
+  message = ['dungeon', 'town'].includes(next) ? notice : '';
+  if (message) notice = '';
   bagOpen = false;
   persist();
   render();
@@ -63,6 +70,27 @@ function navigate(next) {
 
 function markSeen(id) {
   if (!save.story.seen.includes(id)) save.story.seen.push(id);
+}
+
+function awardMedals() {
+  const { earned, gold } = claimMedals(save);
+  if (!earned.length) return;
+  save.medals.push(...earned.map(medal => medal.id));
+  save.hero = { ...save.hero, gold: save.hero.gold + gold };
+  const legend = earned.some(medal => medal.id === 'tower10');
+  if (legend) save.hero = { ...save.hero, gear: { ...save.hero.gear, [GEAR.pen.slot]: 'pen' } };
+  if (save.run?.battle) save.run.battle.hero = save.hero;
+  notice = [notice, ...earned.map(medal => `🎖️ 훈장 「${medal.name}」 · ${medal.gold}G`), legend && `${GEAR.pen.name}을 받았습니다`].filter(Boolean).join(' ');
+}
+
+// 층의 마지막 칸을 넘겼을 때: 탑 기록, 유물 내밀기, 훈장 확인.
+function floorDone() {
+  const run = save.run;
+  if (!run || run.step < run.events.length) return;
+  const area = getChapter(run.chapter ?? 1);
+  if (area.endless) save.best.tower = Math.max(save.best.tower, run.floor);
+  save.run = offerRelics(run, rng(), !!area.endless);
+  awardMedals();
 }
 
 function showArticle(no, explanation = null) {
@@ -97,7 +125,7 @@ function openEvent() {
   message = '';
   if (event.type === 'battle') {
     battleView = null;
-    run.battle = startBattle(save.hero, event, save.skills, rng());
+    run.battle = startBattle(save.hero, event, save.skills, rng(), { relics: run.relics ?? [], combo: run.combo ?? 0 });
     run.battle.log = [monsterContent(monsters, event).appear];
     navigate('battle');
     return;
@@ -116,6 +144,8 @@ function openEvent() {
     run.step++;
     sfx('heal');
   }
+  floorDone();
+  if (notice) { message = `${message} ${notice}`; notice = ''; }
   persist(); render();
 }
 
@@ -128,6 +158,8 @@ function answerQuiz(value) {
   if (correct) save.hero = { ...save.hero, gold: save.hero.gold + event.gold };
   message = `${correct ? `정답입니다! ${event.gold}G를 얻으셨습니다.` : `알맞은 조문은 ${event.article}입니다.`} ${event.quote}`;
   run.step++;
+  floorDone();
+  if (notice) { message = `${message} ${notice}`; notice = ''; }
   persist(); render();
 }
 
@@ -148,6 +180,15 @@ function act(action) {
   save.skills = next.skills;
   save.revived = rememberWrong(save.revived, next);
   if (next.phase === 'won' && !next.wrong) save.revived = save.revived.filter(r => r.cardId !== next.event.cardId || r.v !== next.event.v);
+  if (ended(next) && !ended(before)) {
+    if (next.phase === 'won') {
+      save.stats.wins++;
+      if (next.event.instance.kind === 'ok') save.stats.phantoms++;
+      save.run.combo = next.combo ?? 0;
+      save.stats.maxCombo = Math.max(save.stats.maxCombo, save.run.combo);
+    } else if (next.wrong) save.run.combo = 0;
+    awardMedals();
+  }
   if (action.type === 'item' || ended(next)) bagOpen = false;
   persist(); render(false, true, before);
   battleFx(before, next, root);
@@ -164,7 +205,7 @@ function continueBattle() {
     return;
   }
   if (save.hero.points > 0) { levelReturn = 'battle'; navigate('levelup'); return; }
-  if (state.phase === 'won' && state.event.boss) {
+  if (state.phase === 'won' && state.event.boss && !getChapter(state.event.chapter ?? 1).endless) {
     const chapter = state.event.chapter ?? 1;
     storyReward = state.ui?.chapterReward ?? null;
     if (!save.cleared.includes(chapter)) {
@@ -177,6 +218,7 @@ function continueBattle() {
         storyReward = `${item.name}을 받았습니다`;
         state.ui = { ...state.ui, chapterReward: storyReward };
       }
+      awardMedals();
     }
     storyId = chapter === 1 ? 'boss_clear' : `ch${chapter}_clear`;
     navigate('story'); return;
@@ -185,12 +227,13 @@ function continueBattle() {
   save.run.step++;
   save.run.battle = null;
   battleView = null;
+  floorDone();
   navigate('dungeon');
 }
 
 function finishStory() {
   markSeen(storyId);
-  if (/^ch[23]_intro$/.test(storyId)) {
+  if (/^ch[234]_intro$/.test(storyId)) {
     save.best.floor = Math.max(save.best.floor, save.run.floor);
     navigate('dungeon'); return;
   }
@@ -224,7 +267,12 @@ function render(focus = true, animate = false, previous = null) {
   if (page === 'town') screen = town({ ...common, onEnter: enterDungeon, onPage: navigate });
   if (page === 'dungeon' && save.run) {
     const area = getChapter(save.run.chapter ?? 1);
-    screen = dungeon({ ...common, story: { ...narrative, floors: area.id === 1 ? narrative.floors : narrative.chapters[area.id].floors }, run: save.run, onEvent: openEvent, onTown: returnTown, onQuiz: answerQuiz,
+    const floors = area.id === 1 ? narrative.floors : narrative.chapters[area.id].floors;
+    const floorBase = floors[(save.run.floor - 1) % floors.length];
+    screen = dungeon({ ...common, story: { ...narrative, floors }, run: save.run, onEvent: openEvent, onTown: returnTown, onQuiz: answerQuiz,
+      endless: !!area.endless,
+      floorInfo: area.endless ? { ...floorBase, name: `${save.run.floor}층 · ${floorBase.name.replace(/^\d+층 · /, '')}` } : floorBase,
+      onRelic: id => { save.run = chooseRelic(save.run, id); sfx('coin'); persist(); render(false); },
       onFloorSeen: () => { save.run.uiSeenFloors = [...new Set([...(Array.isArray(save.run.uiSeenFloors) ? save.run.uiSeenFloors : []), save.run.floor])]; persist(); },
       onNext: () => {
         save.run = nextFloor(save.run, cards, rng());
@@ -236,7 +284,10 @@ function render(focus = true, animate = false, previous = null) {
   if (page === 'battle' && save.run?.battle) {
     const state = save.run.battle;
     if (!state.ui || typeof state.ui !== 'object' || Array.isArray(state.ui)) state.ui = {};
-    battleView ??= { monster: monsterContent(monsters, state.event) };
+    if (!battleView) {
+      battleView = { monster: monsterContent(monsters, state.event) };
+      if (state.event.affix) battleView.monster.name = `${AFFIXES[state.event.affix].label} ${battleView.monster.name}`;
+    }
     screen = battle({ state, monster: battleView.monster, bagOpen, articles, animate, previous, entering: focus && !animate, tutorial: !save.tutorialDone,
       presentation: state.ui, pending: Array.isArray(state.ui.messages) ? state.ui.messages : [],
       onPresented: kind => {
@@ -254,7 +305,12 @@ function render(focus = true, animate = false, previous = null) {
     save.hero = allocatePoint(save.hero, stat);
     if (save.run?.battle) save.run.battle.hero = save.hero;
     persist(); render(false);
-  }, onDone: () => { if (!save.hero.points) navigate(levelReturn); } });
+  }, onDone: () => { if (!save.hero.points) navigate(canChooseJob(save.hero) ? 'job' : levelReturn); } });
+  if (page === 'job') screen = jobScreen({ onChoose: id => {
+    save.hero = chooseJob(save.hero, id);
+    if (save.run?.battle) save.run.battle.hero = save.hero;
+    navigate(levelReturn);
+  } });
   if (page === 'shop') screen = shop({ ...common, onBuy: id => {
     const result = buy(save.hero, id, save.cleared); save.hero = result.hero; message = result.message; persist(); render(false);
     if (result.ok) sfx('coin');
@@ -268,14 +324,15 @@ function render(focus = true, animate = false, previous = null) {
     onPrologue: () => { storyId = 'prologue'; navigate('story'); } });
   if (page === 'skillbook') screen = skillbook({ ...common, skills: save.skills, onArticle: showArticle });
   if (page === 'status') screen = statusScreen({ ...common, best: save.best,
-    onLevel: () => { levelReturn = 'status'; navigate('levelup'); }, onUse: id => {
+    onLevel: () => { levelReturn = 'status'; navigate('levelup'); },
+    onJob: () => { levelReturn = 'status'; navigate('job'); }, onUse: id => {
       if (!CONSUMABLES[id]?.hp || save.hero.hp === save.hero.maxHp) return;
       const next = consume(save.hero, id);
       if (next === save.hero) return;
       save.hero = next; message = `${CONSUMABLES[id].name}를 사용하셨습니다.`; persist(); render(false); sfx('heal');
     } });
   if (page === 'story') {
-    const chapter = /^ch([23])_/.exec(storyId)?.[1];
+    const chapter = /^ch([234])_/.exec(storyId)?.[1];
     const clear = storyId === 'boss_clear' || /^ch[23]_clear$/.test(storyId);
     screen = storyScreen({ title: clear ? `${chapter === '3' ? 'DLC · ' : ''}${chapter ?? 1}장 클리어!` :
       chapter ? narrative.chapters[chapter].title : '신입 감독관의 첫날',
@@ -289,7 +346,7 @@ function render(focus = true, animate = false, previous = null) {
   const scene = page === 'story' ? storyId === 'boss_clear' || /^ch[23]_clear$/.test(storyId) ? 'victory' : 'story' :
     page === 'inn' && wasFaint || page === 'battle' && save.run?.battle?.phase === 'lost' ? 'faint' :
     ['battle', 'dungeon'].includes(page) && save.run ?
-      page === 'battle' && save.run.battle?.event.boss ? 'boss' : `floor-${save.run.floor}` : 'town';
+      page === 'battle' && save.run.battle?.event.boss ? 'boss' : `floor-${(save.run.floor - 1) % 6 + 1}` : 'town';
   root.replaceChildren(sceneScreen(screen ?? h('p', {}, '마을로 이동해 주세요.'), scene,
     ['battle', 'dungeon'].includes(page) ? save.run?.chapter ?? 1 : 1));
   document.body.classList.toggle('in-battle', page === 'battle');

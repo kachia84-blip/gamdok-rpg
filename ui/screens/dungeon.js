@@ -2,18 +2,25 @@
 import { msgbox } from './msgbox.js';
 import { effectiveStats } from '../../core/hero.js';
 import { citeLabel } from '../../core/reveal.js';
+import { RELICS } from '../../core/relics.js';
 
-export function dungeon({ run, story, hero, save, articles, onEvent, onNext, onTown, onQuiz, onFloorSeen, message }) {
-  const floor = story.floors[run.floor - 1];
+export function dungeon({ run, story, hero, save, articles, onEvent, onNext, onTown, onQuiz, onFloorSeen, message, floorInfo, endless = false, onRelic }) {
+  const floor = floorInfo ?? story.floors[run.floor - 1];
   const event = run.events[run.step];
   const names = { battle: '몬스터', chest: '보물상자', rest: '쉼터', npc: '떠돌이 감독관' };
   const path = h('ol', { className: 'event-path', 'aria-label': '탐험 경로' }, run.events.map((item, index) =>
     h('li', { className: index < run.step ? 'done' : index === run.step ? 'current' : '', 'aria-current': index === run.step ? 'step' : null },
       `${index + 1}. ${item.boss ? '보스' : names[item.type]}${index < run.step ? ' · 완료' : ''}`)));
+  const info = [run.combo >= 2 && `🔥 ${run.combo}연속`, (run.relics ?? []).map(id => RELICS[id]?.name.split(' ')[0]).join('')].filter(Boolean).join(' · ');
   const card = h('section', { className: 'dungeon-card panel', 'aria-label': '현재 칸' });
   if (!event) {
-    card.append(h('h2', {}, '이 층을 돌파하셨습니다!'),
-      run.floor < 6 && button('다음 층', onNext, { className: 'primary full' }));
+    if (run.relicOffer?.length) {
+      card.append(h('h2', {}, '🎁 유물을 하나 고르세요'), h('div', { className: 'relic-choices' }, run.relicOffer.map(id =>
+        button(`${RELICS[id].name} · ${RELICS[id].desc}`, () => onRelic(id), { className: 'full' }))));
+    } else {
+      card.append(h('h2', {}, '이 층을 돌파하셨습니다!'),
+        (endless || run.floor < 6) && button('다음 층', onNext, { className: 'primary full' }));
+    }
   } else if (event.type === 'npc' && event.opened) {
     const npc = story.events.npc[0] ?? { name: '떠돌이 감독관' };
     card.append(h('h2', {}, npc.name), h('p', {}, event.text),
@@ -26,7 +33,7 @@ export function dungeon({ run, story, hero, save, articles, onEvent, onNext, onT
       button(event.type === 'battle' ? '맞서기' : '살펴보기', onEvent, { className: 'primary full' }));
   }
   const screen = h('div', { className: 'game-screen dungeon-screen' }, heading('1장 · 추락의 고층 빌딩', floor.name),
-    h('section', { className: 'dungeon-route' }, path), card, back(onTown));
+    h('section', { className: 'dungeon-route' }, path, info && h('p', { className: 'run-info' }, info)), card, back(onTown));
   const firstEntry = !Array.isArray(run.uiSeenFloors) || !run.uiSeenFloors.includes(run.floor);
   let dialogue;
   if (firstEntry || message) {

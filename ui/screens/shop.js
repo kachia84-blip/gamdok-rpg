@@ -5,7 +5,7 @@ export function shop({ hero, save, onBuy, onTown, message }) {
   const cleared = save.cleared ?? [];
   const open = item => item.tier === 1 || cleared.includes(item.tier - 1);
   const row = ([id, item]) => h('div', { className: 'shop-row' }, h('div', {}, h('strong', {}, item.name),
-    h('small', {}, item.defense ? `방어 +${item.defense}` : item.law ? `법지식 +${item.law}` : item.eye ? `관찰력 +${item.eye}` : item.hp ? `HP ${item.hp} 회복` : id === 'tape' ? '환영 여부 확인' : '조문 보기 2개 제거')),
+    h('small', {}, item.defense ? `방어 +${item.defense}` : item.law ? `법지식 +${item.law}` : item.eye ? `관찰력 +${item.eye}` : item.hp ? `HP ${item.hp} 회복` : id === 'tape' ? '환영 여부 확인' : id === 'extinguisher' ? '다음 반격 1회 막기' : '조문 보기 2개 제거')),
     open(item) ? button(`${item.price}G`, () => onBuy(id), {
       disabled: hero.gold < item.price || !item.slot && bagCount(hero) >= 10 }) : h('span', { className: 'muted' }, `🔒 ${item.tier - 1}장 클리어`));
   const recovery = Object.entries(CONSUMABLES).filter(([, item]) => item.hp && open(item)).sort((a, b) => b[1].hp - a[1].hp).slice(0, 2);

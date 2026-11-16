@@ -1,4 +1,4 @@
-import { CHAPTERS, getChapter } from '../core/chapters.js';
+import { AREAS, getChapter } from '../core/chapters.js';
 
 const lines = (value, fallback) => Array.isArray(value) && value.length && value.every(x => typeof x === 'string') ? value : fallback;
 const text = (value, fallback) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -12,7 +12,7 @@ export function storyContent(raw, chapter = 1) {
   const data = record(raw) ? raw : {};
   const town = record(data.town) ? data.town : {};
   const events = record(data.events) ? data.events : {};
-  const chapters = Object.fromEntries(CHAPTERS.filter(area => area.id > 1).map(area => {
+  const chapters = Object.fromEntries(AREAS.filter(area => area.id > 1).map(area => {
     const source = record(data.chapters?.[area.id]) ? data.chapters[area.id] : {};
     return [area.id, {
       title: text(source.title, `${area.id}장 · ${area.name}`),
@@ -28,7 +28,7 @@ export function storyContent(raw, chapter = 1) {
   }));
   return {
     chapters,
-    ch2_intro: chapters[2].intro, ch3_intro: chapters[3].intro,
+    ch2_intro: chapters[2].intro, ch3_intro: chapters[3].intro, ch4_intro: chapters[4].intro,
     ch2_clear: chapters[2].boss_clear, ch3_clear: chapters[3].boss_clear,
     prologue: lines(data.prologue, ['지청에 오신 것을 환영합니다. 오늘부터 당신은 신입 감독관입니다.', '추락의 고층 빌딩에 수상한 그림자가 드리웠습니다. 조문과 관찰력으로 몬스터에 맞서 주세요.']),
     town: { greeting: lines(town.greeting, ['법전을 챙기셨나요? 출발 전에 지청에서 준비해 주세요.']),
@@ -51,11 +51,19 @@ export function storyContent(raw, chapter = 1) {
 export function monsterContent(raw, event) {
   const area = getChapter(event.chapter ?? 1);
   const chapter = record(raw?.[`chapter${area.id}`]) ? raw[`chapter${area.id}`] : {};
-  const source = record(chapter.monsters?.[event.cardId]) ? chapter.monsters[event.cardId] : {};
-  const boss = record(chapter.boss) ? chapter.boss : {};
+  let source = record(chapter.monsters?.[event.cardId]) ? chapter.monsters[event.cardId] : {};
+  // 끝없는 탑은 앞 장의 몬스터를 그대로 불러옵니다.
+  if (area.endless && !record(chapter.monsters?.[event.cardId])) {
+    for (const n of [1, 2, 3]) {
+      const found = raw?.[`chapter${n}`]?.monsters?.[event.cardId];
+      if (record(found)) { source = found; break; }
+    }
+  }
+  const bosses = Array.isArray(chapter.bosses) ? chapter.bosses.filter(record) : [];
+  const boss = bosses.length ? bosses[(Math.ceil(event.floor / 5) - 1) % bosses.length] : record(chapter.boss) ? chapter.boss : {};
   const selected = event.boss ? boss : source;
   return { name: text(selected.name, event.boss ? area.id === 1 ? '고층 빌딩의 그림자' : `${area.name}의 그림자` : '현장의 망령'), emoji: text(selected.emoji, '🪖'),
-    title: text(selected.title, event.boss ? '6층의 지배자' : ''),
+    title: text(selected.title, event.boss ? `${event.floor}층의 지배자` : ''),
     appear: text(event.boss ? boss.lines?.appear : source.appear, '여기까지 왔군!'),
     taunt: chooseLine(selected.taunts ?? (event.boss ? boss.lines?.taunts : null), text(selected.taunt, text(source.taunt, '{situation}'))),
     hits: lines(selected.hits, event.boss ? lines(boss.lines?.hits, lines(boss.lines?.hit, ['제법이군!'])) : [text(source.hit, '아직 끝나지 않았어!')]),

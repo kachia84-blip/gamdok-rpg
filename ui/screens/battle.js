@@ -61,7 +61,8 @@ export function battle({ state, monster, bagOpen, onBag, onAction, onContinue, o
     dock.append(h('h2', {}, '🎒 가방'), h('div', { className: 'choices' },
       Object.entries(CONSUMABLES).map(([id, item]) => button(`${item.name} ×${state.hero.bag[id] ?? 0}`, () => onAction({ type: 'item', id }), {
         disabled: !(state.hero.bag[id] > 0) || item.hp && state.hero.hp === state.hero.maxHp ||
-          id === 'notebook' && (phase !== 'cite' || state.hiddenChoices.length > 0) || id === 'tape' && state.revealed !== null }))),
+          id === 'notebook' && (phase !== 'cite' || state.hiddenChoices.length >= 2) || id === 'tape' && state.revealed !== null ||
+          id === 'extinguisher' && state.guard > 0 }))),
       h('p', { className: 'muted' }, '법전 수첩은 조문 보기에서 사용해 주세요.'),
       button('닫기', onBag, { className: 'secondary full' }));
   } else if (phase === 'cite') {
