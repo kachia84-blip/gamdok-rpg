@@ -14,7 +14,7 @@ const id = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(v
 
 export function emptySave() {
   return { v: 4, hero: createHero(), skills: [], revived: [], cleared: [], best: { floor: 0, tower: 0 }, story: { seen: [] }, run: null,
-    stats: { wins: 0, phantoms: 0, maxCombo: 0 }, medals: [], dex: [], daily: null };
+    stats: { wins: 0, phantoms: 0, maxCombo: 0, elites: 0 }, medals: [], dex: [], daily: null };
 }
 
 function validHero(hero) {
@@ -38,7 +38,9 @@ function validEvent(event) {
       !integer(event.power === undefined ? 0 : event.power, 0, 20) ||
       event.affix !== undefined && !Object.hasOwn(AFFIXES, event.affix) ||
       event.site !== undefined && !integer(event.site, 1, 3) ||
-      event.danger !== undefined && event.danger !== true) return false;
+      event.danger !== undefined && event.danger !== true ||
+      event.elite !== undefined && event.elite !== true ||
+      event.relic != null && !Object.hasOwn(RELICS, event.relic)) return false;
   const top = event.chapter === 4 ? MAX_FLOOR : 6;
   if (event.type === 'battle') {
     const instance = event.instance;
@@ -50,7 +52,7 @@ function validEvent(event) {
       event.choices.every(article) && event.choices.includes(instance.article) &&
       (instance.kind === 'ok' || record(instance.violation) && validRebuttal(instance.violation.rebuttal));
   }
-  return ['chest', 'rest', 'npc', 'altar', 'gamble'].includes(event.type) && integer(event.gold) && integer(event.hp) &&
+  return ['chest', 'rest', 'npc', 'altar', 'gamble', 'merchant'].includes(event.type) && integer(event.gold) && integer(event.hp) &&
     (event.type !== 'npc' || typeof event.text === 'string' && article(event.article) &&
       Array.isArray(event.choices) && event.choices.every(article) && event.choices.includes(event.article));
 }
@@ -70,7 +72,7 @@ function validBattle(battle, event) {
 
 function validRun(run) {
   return record(run) && integer(run.chapter === undefined ? 1 : run.chapter, 1, 4) && integer(run.floor, 1, run.chapter === 4 ? MAX_FLOOR : 6) &&
-    (run.relics === undefined || validRelics(run.relics)) && integer(run.combo ?? 0) &&
+    (run.relics === undefined || validRelics(run.relics)) && integer(run.combo ?? 0) && integer(run.wins ?? 0) &&
     (run.relicOffer == null || Array.isArray(run.relicOffer) && run.relicOffer.length <= 3 && run.relicOffer.every(r => Object.hasOwn(RELICS, r))) &&
     (run.relicFloor === undefined || integer(run.relicFloor, 1, MAX_FLOOR)) &&
     (run.paths == null || Array.isArray(run.paths) && run.paths.length <= 2 && run.paths.every(p => record(p) && integer(p.site, 1, 3) && Object.hasOwn(MODS, p.mod))) && Array.isArray(run.events) && run.events.length === 3 &&
@@ -95,18 +97,18 @@ export function parseSave(text) {
     fresh.revived = Array.isArray(s.revived) ? s.revived.filter(r => record(r) && id(r.cardId) && (r.v === null || Number.isFinite(r.v))) : [];
     fresh.best.floor = integer(s.best?.floor, 0, MAX_FLOOR) ? s.best.floor : 0;
     fresh.best.tower = integer(s.best?.tower, 0, MAX_FLOOR) ? s.best.tower : 0;
-    for (const key of ['wins', 'phantoms', 'maxCombo']) fresh.stats[key] = integer(s.stats?.[key]) ? s.stats[key] : 0;
+    for (const key of ['wins', 'phantoms', 'maxCombo', 'elites']) fresh.stats[key] = integer(s.stats?.[key]) ? s.stats[key] : 0;
     fresh.medals = Array.isArray(s.medals) ? [...new Set(s.medals.filter(validMedal))] : [];
     fresh.dex = Array.isArray(s.dex) ? [...new Set(s.dex.filter(id))].slice(0, 500) : [];
     fresh.daily = record(s.daily) && validDay(s.daily.date) && integer(s.daily.progress, 0, 99) && typeof s.daily.done === 'boolean' ?
-      { date: s.daily.date, progress: s.daily.progress, done: s.daily.done } : null;
+      { date: s.daily.date, progress: s.daily.progress, done: s.daily.done, streak: integer(s.daily.streak, 0, 9999) ? s.daily.streak : 0 } : null;
     fresh.story.seen = Array.isArray(s.story?.seen) ? [...new Set(s.story.seen.filter(id))] : [];
     fresh.cleared = Array.isArray(s.cleared) ? [...new Set(s.cleared.filter(n => integer(n, 1, 3)))] :
       s.cleared === undefined && fresh.story.seen.includes('boss_clear') ? [1] : [];
     fresh.run = validRun(s.run) ? s.run : null;
     if (fresh.run) {
       fresh.run.chapter ??= 1;
-      fresh.run.relics ??= []; fresh.run.relicOffer ??= null; fresh.run.combo ??= 0; fresh.run.paths ??= null;
+      fresh.run.relics ??= []; fresh.run.relicOffer ??= null; fresh.run.combo ??= 0; fresh.run.paths ??= null; fresh.run.wins ??= 0;
       for (const event of [...fresh.run.events, ...(fresh.run.battle ? [fresh.run.battle.event] : [])]) {
         event.chapter ??= 1;
         event.power ??= 0;

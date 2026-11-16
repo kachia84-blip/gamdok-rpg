@@ -26,10 +26,15 @@ function counter(battle, multiplier = 1) {
     log(battle, '🛡️ 반격을 막아 냈습니다!');
     return;
   }
-  const damage = Math.max(1, Math.round(battle.monster.attack * multiplier) - statsOf(battle).defense);
+  const damage = Math.max(1, Math.round(battle.monster.attack * multiplier * ((battle.relics ?? []).includes('dice') ? 1.3 : 1)) - statsOf(battle).defense);
   battle.hero.hp = Math.max(0, battle.hero.hp - damage);
   battle.effect = { target: 'hero', damage };
   log(battle, `반격! HP가 ${damage} 줄었습니다.`);
+  if (battle.event.affix === 'thief' && battle.hero.gold > 0) {
+    const stolen = Math.min(20, battle.hero.gold);
+    battle.hero.gold -= stolen;
+    log(battle, `💸 ${stolen}G를 도둑맞았습니다.`);
+  }
   if (!battle.hero.hp) { battle.phase = 'lost'; log(battle, '쓰러지셨습니다. 숙직실로 이동합니다.'); }
 }
 
@@ -44,11 +49,11 @@ function win(battle, rng, phantom = false) {
   // 연속 승리: 실수 없이 이긴 횟수만큼 보상이 10%씩(최대 50%) 늘어납니다.
   const streak = 1 + 0.1 * Math.min(5, battle.combo ?? 0);
   battle.combo = battle.wrong ? 0 : (battle.combo ?? 0) + 1;
-  const danger = battle.event.danger ? 1.5 : 1;
+  const danger = (battle.event.danger ? 1.5 : 1) * (battle.event.elite ? 2 : 1);
   const exp = Math.round((phantom ? 4 + floor * 2 : (10 + floor * 5) * (boss ? 3 : 1)) * streak * (affix === 'fierce' ? 1.5 : affix === 'swift' ? 1.3 : 1) *
-    (relics.includes('stamp') ? 1.3 : 1) * danger);
+    (relics.includes('stamp') ? 1.3 : 1) * (relics.includes('hourglass') ? 1.5 : 1) * danger);
   const gold = phantom ? (relics.includes('candle') ? 30 : 0) : Math.round(danger * (6 + floor * 4 + stats.talk) * (boss ? 3 : 1) * streak *
-    (affix === 'golden' ? 3 : 1) * (relics.includes('purse') ? 1.5 : 1) * (battle.hero.job === 'talker' ? 1.3 : 1));
+    (affix === 'golden' ? 3 : affix === 'thief' ? 2 : 1) * (relics.includes('purse') ? 1.5 : 1) * (relics.includes('dice') ? 2 : 1) * (battle.hero.job === 'talker' ? 1.3 : 1));
   const gained = gainExp({ ...battle.hero, gold: battle.hero.gold + gold }, exp);
   battle.hero = gained.hero;
   const learned = !phantom && !battle.skills.includes(instance.article);
@@ -147,6 +152,7 @@ export function battleAction(before, action, rng) {
   }
   if (action.type === 'flee') {
     if (battle.event.affix === 'swift') { log(battle, '재빠른 몬스터라 도망칠 수 없습니다.'); counter(battle); }
+    else if ((battle.relics ?? []).includes('hourglass')) { log(battle, '⏳ 모래시계 때문에 도망칠 수 없습니다.'); counter(battle); }
     else if (rng() < Math.min(1, 0.5 + stats.eye * 0.05) || (battle.relics ?? []).includes('whistle')) { battle.phase = 'fled'; log(battle, '도망에 성공하셨습니다.'); }
     else { log(battle, '도망길이 막혔습니다.'); counter(battle); }
     return battle;

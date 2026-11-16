@@ -4,8 +4,8 @@ import { makeRng } from '../core/rng.js';
 import { allocatePoint, faint, heal, xpNeeded, GEAR } from '../core/hero.js';
 import { getChapter, startFloors, TOWER, BOSS_EVERY } from '../core/chapters.js';
 import { startDungeon, nextFloor, rememberWrong, rpgCards, AFFIXES, offerPaths } from '../core/dungeon.js';
-import { todayKey, questFor, dailyState, progressQuest } from '../core/quests.js';
-import { offerRelics, chooseRelic, forceOffer } from '../core/relics.js';
+import { todayKey, questFor, dailyState, progressQuest, streakBonus } from '../core/quests.js';
+import { RELICS, offerRelics, chooseRelic, forceOffer, merchantStock, merchantPrice, healPrice } from '../core/relics.js';
 import { canChooseJob, chooseJob } from '../core/jobs.js';
 import { claimMedals } from '../core/medals.js';
 import { startBattle, battleAction, ended } from '../core/battle.js';
@@ -21,6 +21,7 @@ import { inn } from './screens/inn.js';
 import { senior } from './screens/senior.js';
 import { skillbook } from './screens/skillbook.js';
 import { status as statusScreen } from './screens/status.js';
+import { dex as dexScreen } from './screens/dex.js';
 import { story as storyScreen } from './screens/story.js';
 import { article } from './screens/article.js';
 import { hpBar, panel, fitScreen, sceneScreen } from './screens/common.js';
@@ -63,7 +64,7 @@ function persist() {
 function navigate(next) {
   page = next;
   // 훈장 같은 알림은 던전이나 마을에 돌아왔을 때 한 번 보여 줍니다.
-  message = ['dungeon', 'town'].includes(next) ? notice : '';
+  message = ['dungeon', 'town', 'inn'].includes(next) ? notice : '';
   if (message) notice = '';
   bagOpen = false;
   persist();
@@ -91,7 +92,7 @@ function quest(type, value = 1) {
   if (!result.gold) return;
   save.hero = { ...save.hero, gold: save.hero.gold + result.gold };
   if (save.run?.battle) save.run.battle.hero = save.hero;
-  notice = [notice, `📋 오늘의 의뢰 「${result.quest.text}」 완료 · ${result.gold}G`].filter(Boolean).join(' ');
+  notice = [notice, `📋 오늘의 의뢰 「${result.quest.text}」 완료 · ${result.gold}G${result.daily.streak >= 2 ? ` · ${result.daily.streak}일 연속!` : ''}`].filter(Boolean).join(' ');
 }
 
 // 층의 마지막 칸을 넘겼을 때: 탑 기록, 유물 내밀기, 훈장 확인.
@@ -120,7 +121,15 @@ function enterDungeon(startFloor = 1) {
   navigate(save.run.battle ? 'battle' : 'dungeon');
 }
 
+// 탐험을 마칠 때 한 줄로 결과를 알려 줍니다.
+function summarize() {
+  const run = save.run;
+  if (!run || !(run.wins > 0 || run.step > 0)) return;
+  notice = [notice, `🧾 이번 탐험: ${run.floor}층 · ${run.wins ?? 0}승 · 유물 ${(run.relics ?? []).length}개`].filter(Boolean).join(' ');
+}
+
 function returnTown() {
+  summarize();
   save.run = null;
   battleView = null;
   wasFaint = false;
@@ -139,10 +148,12 @@ function openEvent() {
     navigate('battle');
     return;
   }
-  if (['npc', 'altar', 'gamble'].includes(event.type)) event.opened = true;
+  if (['npc', 'altar', 'gamble', 'merchant'].includes(event.type)) event.opened = true;
+  if (event.type === 'merchant' && event.relic === undefined) event.relic = merchantStock(run, rng());
+  const magnet = (run.relics ?? []).includes('magnet') ? 2 : 1;
   if (event.type === 'chest') {
-    save.hero = { ...save.hero, gold: save.hero.gold + event.gold };
-    message = `보물상자에서 ${event.gold}G를 얻으셨습니다.`;
+    save.hero = { ...save.hero, gold: save.hero.gold + event.gold * magnet };
+    message = `보물상자에서 ${event.gold * magnet}G를 얻으셨습니다.`;
     run.step++;
     sfx('coin');
   }
@@ -164,20 +175,31 @@ function answerQuiz(value) {
   if (event?.type !== 'npc' || !event.opened || !event.choices.includes(value)) return;
   const correct = value === event.article;
   sfx(correct ? 'coin' : 'miss');
-  if (correct) save.hero = { ...save.hero, gold: save.hero.gold + event.gold };
-  message = `${correct ? `정답입니다! ${event.gold}G를 얻으셨습니다.` : `알맞은 조문은 ${event.article}입니다.`} ${event.quote}`;
+  const prize = event.gold * ((run.relics ?? []).includes('magnet') ? 2 : 1);
+  if (correct) save.hero = { ...save.hero, gold: save.hero.gold + prize };
+  message = `${correct ? `정답입니다! ${prize}G를 얻으셨습니다.` : `알맞은 조문은 ${event.article}입니다.`} ${event.quote}`;
   run.step++;
   floorDone();
   if (notice) { message = `${message} ${notice}`; notice = ''; }
   persist(); render();
 }
 
-// 제단(HP를 바치고 유물)과 동전 던지기(골드 걸기)에 답합니다.
+// 제단(HP를 바치고 유물), 동전 던지기(골드 걸기), 상인(유물·치료 구입)에 답합니다.
 function answerSide(accept) {
   const run = save.run;
   const event = run?.events[run.step];
-  if (!['altar', 'gamble'].includes(event?.type) || !event.opened) return;
+  if (!['altar', 'gamble', 'merchant'].includes(event?.type) || !event.opened) return;
   if (!accept) message = '그냥 지나쳤습니다.';
+  else if (event.type === 'merchant') {
+    const price = accept === 'heal' ? healPrice(event) : merchantPrice(event);
+    if (!['relic', 'heal'].includes(accept) || save.hero.gold < price) return;
+    if (accept === 'relic' && (!event.relic || (run.relics ?? []).includes(event.relic))) return;
+    if (accept === 'heal' && save.hero.hp === save.hero.maxHp) return;
+    save.hero = { ...save.hero, gold: save.hero.gold - price, ...(accept === 'heal' ? { hp: save.hero.maxHp } : {}) };
+    if (accept === 'relic') run.relics = [...(run.relics ?? []), event.relic];
+    message = accept === 'relic' ? `${RELICS[event.relic].name} 구입 · ${price}G를 냈습니다.` : `${price}G를 내고 치료받았습니다. HP가 가득 찼습니다.`;
+    sfx(accept === 'heal' ? 'heal' : 'coin');
+  }
   else if (event.type === 'altar') {
     const offered = forceOffer(run, rng());
     if (offered === run) {
@@ -222,6 +244,8 @@ function act(action) {
   if (ended(next) && !ended(before)) {
     if (next.phase === 'won') {
       save.stats.wins++;
+      save.run.wins = (save.run.wins ?? 0) + 1;
+      if (next.event.elite) save.stats.elites++;
       if (next.event.instance.kind === 'ok') save.stats.phantoms++;
       save.run.combo = next.combo ?? 0;
       save.stats.maxCombo = Math.max(save.stats.maxCombo, save.run.combo);
@@ -241,6 +265,7 @@ function continueBattle() {
   if (!state || !ended(state)) return;
   if (state.phase === 'lost') {
     save.hero = faint(save.hero);
+    summarize();
     save.run = null;
     wasFaint = true;
     navigate('inn');
@@ -284,6 +309,11 @@ function continueBattle() {
   save.run.step++;
   save.run.battle = null;
   battleView = null;
+  if (state.phase === 'won' && state.event.elite) {
+    // 정예를 이기면 층 도중에 유물을 하나 고릅니다.
+    const offered = forceOffer(save.run, rng());
+    if (offered !== save.run) { save.run = offered; notice = [notice, '👑 정예 격파! 유물을 하나 고르세요.'].filter(Boolean).join(' '); }
+  }
   floorDone();
   navigate('dungeon');
 }
@@ -327,7 +357,7 @@ function render(focus = true, animate = false, previous = null) {
   if (page === 'town') {
     const today = questFor(todayKey()), daily = dailyState(save.daily, todayKey());
     screen = town({ ...common, onEnter: enterDungeon, onPage: navigate,
-      extra: !daily.done && !questShown ? `📋 오늘의 의뢰: ${today.text} (${daily.progress}/${today.goal}) · 보상 ${today.gold}G` : null });
+      extra: !daily.done && !questShown ? `📋 오늘의 의뢰: ${today.text} (${daily.progress}/${today.goal}) · 보상 ${Math.round(today.gold * streakBonus(daily.streak))}G${daily.streak ? ` · ${daily.streak}일 연속 중` : ''}` : null });
     questShown = true;
   }
   if (page === 'dungeon' && save.run) {
@@ -357,6 +387,10 @@ function render(focus = true, animate = false, previous = null) {
         const affix = AFFIXES[state.event.affix];
         battleView.monster.name = `${affix.label} ${battleView.monster.name}`;
         battleView.monster.appear = `[${affix.label}] ${affix.desc}! ${battleView.monster.appear}`;
+      }
+      if (state.event.elite) {
+        battleView.monster.name = `정예 ${battleView.monster.name}`;
+        battleView.monster.appear = `[정예] 공격이 거세지만 보상 2배, 이기면 유물! ${battleView.monster.appear}`;
       }
     }
     screen = battle({ state, monster: battleView.monster, bagOpen, articles, animate, previous, entering: focus && !animate, tutorial: !save.tutorialDone,
@@ -396,13 +430,15 @@ function render(focus = true, animate = false, previous = null) {
   if (page === 'skillbook') screen = skillbook({ ...common, skills: save.skills, onArticle: showArticle });
   if (page === 'status') screen = statusScreen({ ...common, best: save.best, total: cards.length,
     quest: { ...questFor(todayKey()), ...dailyState(save.daily, todayKey()) },
-    onLevel: () => { levelReturn = 'status'; navigate('levelup'); },
+    onLevel: () => { levelReturn = 'status'; navigate('levelup'); }, onDex: () => navigate('dex'),
     onJob: () => { levelReturn = 'status'; navigate('job'); }, onUse: id => {
       if (!CONSUMABLES[id]?.hp || save.hero.hp === save.hero.maxHp) return;
       const next = consume(save.hero, id);
       if (next === save.hero) return;
       save.hero = next; message = `${CONSUMABLES[id].name}를 사용하셨습니다.`; persist(); render(false); sfx('heal');
     } });
+  if (page === 'dex') screen = dexScreen({ cards, seen: save.dex, onArticle: showArticle, onBack: () => navigate('status'),
+    lookup: card => monsterContent(monsters, { cardId: card.id, chapter: TOWER.id, floor: 1 }) });
   if (page === 'story') {
     const chapter = /^ch([234])_/.exec(storyId)?.[1];
     const clear = storyId === 'boss_clear' || /^ch[23]_clear$/.test(storyId);

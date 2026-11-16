@@ -16,9 +16,15 @@ export function questFor(key) {
 }
 
 // 날짜가 바뀌면 새 의뢰로 갈아 끼웁니다.
+// 어제 의뢰를 끝냈다면 연속 일수(streak)를 이어 갑니다.
+const dayAfter = key => { const [y, m, d] = key.split('-').map(Number); return todayKey(new Date(y, m - 1, d + 1)); };
 export function dailyState(daily, key) {
-  return daily?.date === key ? daily : { date: key, progress: 0, done: false };
+  if (daily?.date === key) return { ...daily, streak: daily.streak ?? 0 };
+  const kept = daily?.done && validDay(daily.date) && dayAfter(daily.date) === key ? daily.streak ?? 0 : 0;
+  return { date: key, progress: 0, done: false, streak: kept };
 }
+// 연속으로 끝낸 날마다 보상이 20%씩(최대 2배) 늘어납니다.
+export const streakBonus = streak => 1 + 0.2 * Math.min(5, streak);
 
 // type이 오늘 의뢰와 맞으면 진행도를 올립니다. combo는 지금까지의 최고 연속 수를 그대로 받습니다.
 export function progressQuest(daily, key, type, value = 1) {
@@ -26,5 +32,5 @@ export function progressQuest(daily, key, type, value = 1) {
   if (state.done || quest.id !== type) return { daily: state, gold: 0, quest };
   const progress = Math.min(quest.goal, type === 'combo' ? Math.max(state.progress, value) : state.progress + value);
   const done = progress >= quest.goal;
-  return { daily: { date: key, progress, done }, gold: done ? quest.gold : 0, quest };
+  return { daily: { date: key, progress, done, streak: state.streak + (done ? 1 : 0) }, gold: done ? Math.round(quest.gold * streakBonus(state.streak)) : 0, quest };
 }

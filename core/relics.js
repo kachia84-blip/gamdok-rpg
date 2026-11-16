@@ -13,6 +13,10 @@ export const RELICS = {
   glasses: { name: '👓 도수 안경', desc: '약점 수치가 항상 눈에 띕니다' },
   stamp: { name: '💮 합격 도장', desc: '전투 경험치 1.3배' },
   candle: { name: '🕯️ 촛불', desc: '환영을 간파하면 30G' },
+  magnet: { name: '🧲 자석', desc: '보물상자와 퀴즈 골드 2배' },
+  // 양날 유물: 좋은 점과 나쁜 점이 함께 옵니다.
+  dice: { name: '🎲 주사위', desc: '전투 골드 2배, 대신 받는 피해 1.3배' },
+  hourglass: { name: '⏳ 모래시계', desc: '경험치 1.5배, 대신 도망칠 수 없습니다' },
 };
 export const validRelics = list => Array.isArray(list) && list.length <= Object.keys(RELICS).length &&
   list.every(id => Object.hasOwn(RELICS, id)) && new Set(list).size === list.length;
@@ -38,6 +42,14 @@ export function forceOffer(run, rng) {
   const rest = Object.keys(RELICS).filter(id => !(run.relics ?? []).includes(id));
   return rest.length ? { ...run, relicOffer: shuffled(rng, rest).slice(0, 3) } : run;
 }
+
+// 떠돌이 상인: 아직 없는 유물 하나를 골드로 팝니다. 남은 유물이 없으면 null.
+export function merchantStock(run, rng) {
+  const rest = Object.keys(RELICS).filter(id => !(run.relics ?? []).includes(id));
+  return rest.length ? shuffled(rng, rest)[0] : null;
+}
+export const merchantPrice = event => 30 + event.gold * 3;
+export const healPrice = event => Math.round(merchantPrice(event) / 2);
 
 export function chooseRelic(run, id) {
   if (!run.relicOffer?.includes(id)) return run;

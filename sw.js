@@ -1,5 +1,5 @@
 ﻿importScripts('./fonts/files.js');
-const CACHE_NAME = 'gamdok-v20';
+const CACHE_NAME = 'gamdok-v21';
 const OPTIONAL_FILES = ['./data/monsters.json', './data/story.json', './scenery.css'];
 const FILES = [
   './', './index.html', './style.css', './game.css', './manifest.webmanifest', './icon.svg', './package.json', './sw.js',
@@ -8,7 +8,7 @@ const FILES = [
   './ui/dom.js', './ui/content.js', './ui/app.js', './ui/battle-text.js',
   './ui/screens/common.js', './ui/screens/msgbox.js', './ui/screens/town.js', './ui/screens/dungeon.js', './ui/screens/chapters.js', './ui/screens/battle.js',
   './ui/screens/levelup.js', './ui/screens/job.js', './ui/screens/shop.js', './ui/screens/inn.js', './ui/screens/senior.js',
-  './ui/screens/skillbook.js', './ui/screens/status.js', './ui/screens/story.js', './ui/screens/article.js',
+  './ui/screens/skillbook.js', './ui/screens/status.js', './ui/screens/dex.js', './ui/screens/story.js', './ui/screens/article.js',
   './data/cards.json', './data/articles.json', ...OPTIONAL_FILES,
   './fonts/files.js', ...self.FONT_FILES,
 ];
