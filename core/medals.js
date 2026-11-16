@@ -7,6 +7,7 @@ export const MEDALS = [
   { id: 'skills20', name: '걸어 다니는 법전', hint: '조문 20개 습득', gold: 200, test: s => s.skills.length >= 20 },
   { id: 'combo10', name: '무결점 감독관', hint: '10연속 승리', gold: 300, test: s => s.stats.maxCombo >= 10 },
   { id: 'clear3', name: '세 현장의 해결사', hint: '1~3장 모두 클리어', gold: 500, test: s => [1, 2, 3].every(n => s.cleared.includes(n)) },
+  { id: 'dex30', name: '현장 백과', hint: '도감 30종 채우기', gold: 300, test: s => s.dex.length >= 30 },
   { id: 'tower10', name: '깊은 곳의 전설', hint: '던전 20층 돌파', gold: 500, test: s => s.best.tower >= 20 },
 ];
 export const validMedal = id => MEDALS.some(medal => medal.id === id);

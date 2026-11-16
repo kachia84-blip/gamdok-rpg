@@ -8,6 +8,11 @@ export const RELICS = {
   purse: { name: '💰 두둑한 지갑', desc: '전투 골드 1.5배' },
   clover: { name: '🍀 네잎클로버', desc: '아이템을 두 배 자주 줍습니다' },
   shield: { name: '🛡️ 안전 방패', desc: '전투마다 첫 반격을 막습니다' },
+  whistle: { name: '📯 호루라기', desc: '도망이 반드시 성공합니다' },
+  battery: { name: '🔋 보조 배터리', desc: '다음 층으로 갈 때마다 HP 10 회복' },
+  glasses: { name: '👓 도수 안경', desc: '약점 수치가 항상 눈에 띕니다' },
+  stamp: { name: '💮 합격 도장', desc: '전투 경험치 1.3배' },
+  candle: { name: '🕯️ 촛불', desc: '환영을 간파하면 30G' },
 };
 export const validRelics = list => Array.isArray(list) && list.length <= Object.keys(RELICS).length &&
   list.every(id => Object.hasOwn(RELICS, id)) && new Set(list).size === list.length;
@@ -28,7 +33,15 @@ export function offerRelics(run, rng, endless = false) {
   return { ...run, relicOffer: shuffled(rng, rest).slice(0, 3) };
 }
 
+// 제단처럼 층 도중에 내미는 유물. 남은 유물이 없으면 그대로 돌려줍니다.
+export function forceOffer(run, rng) {
+  const rest = Object.keys(RELICS).filter(id => !(run.relics ?? []).includes(id));
+  return rest.length ? { ...run, relicOffer: shuffled(rng, rest).slice(0, 3) } : run;
+}
+
 export function chooseRelic(run, id) {
   if (!run.relicOffer?.includes(id)) return run;
-  return { ...run, relics: [...(run.relics ?? []), id], relicOffer: null, relicFloor: run.floor };
+  // 층 도중(제단)에 고른 유물은 층 끝 보상을 막지 않습니다.
+  const midFloor = run.step < run.events.length;
+  return { ...run, relics: [...(run.relics ?? []), id], relicOffer: null, ...(midFloor ? {} : { relicFloor: run.floor }) };
 }

@@ -3,8 +3,9 @@ import { emptySave, parseSave, STORAGE_KEY } from '../core/save.js';
 import { makeRng } from '../core/rng.js';
 import { allocatePoint, faint, heal, xpNeeded, GEAR } from '../core/hero.js';
 import { getChapter, startFloors, TOWER, BOSS_EVERY } from '../core/chapters.js';
-import { startDungeon, nextFloor, rememberWrong, rpgCards, AFFIXES } from '../core/dungeon.js';
-import { offerRelics, chooseRelic } from '../core/relics.js';
+import { startDungeon, nextFloor, rememberWrong, rpgCards, AFFIXES, offerPaths } from '../core/dungeon.js';
+import { todayKey, questFor, dailyState, progressQuest } from '../core/quests.js';
+import { offerRelics, chooseRelic, forceOffer } from '../core/relics.js';
 import { canChooseJob, chooseJob } from '../core/jobs.js';
 import { claimMedals } from '../core/medals.js';
 import { startBattle, battleAction, ended } from '../core/battle.js';
@@ -39,6 +40,7 @@ let storyReward = null;
 let levelReturn = 'town';
 let message = '';
 let notice = '';
+let questShown = false;
 let wasFaint = false;
 let bagOpen = false;
 let storageFailed = false;
@@ -83,13 +85,23 @@ function awardMedals() {
   notice = [notice, ...earned.map(medal => `🎖️ 훈장 「${medal.name}」 · ${medal.gold}G`), legend && `${GEAR.pen.name}을 받았습니다`].filter(Boolean).join(' ');
 }
 
+function quest(type, value = 1) {
+  const result = progressQuest(save.daily, todayKey(), type, value);
+  save.daily = result.daily;
+  if (!result.gold) return;
+  save.hero = { ...save.hero, gold: save.hero.gold + result.gold };
+  if (save.run?.battle) save.run.battle.hero = save.hero;
+  notice = [notice, `📋 오늘의 의뢰 「${result.quest.text}」 완료 · ${result.gold}G`].filter(Boolean).join(' ');
+}
+
 // 층의 마지막 칸을 넘겼을 때: 탑 기록, 유물 내밀기, 훈장 확인.
 function floorDone() {
   const run = save.run;
   if (!run || run.step < run.events.length) return;
   const area = getChapter(run.chapter ?? 1);
   if (area.endless) save.best.tower = Math.max(save.best.tower, run.floor);
-  save.run = offerRelics(run, rng(), !!area.endless);
+  save.run = offerPaths(offerRelics(run, rng(), !!area.endless), rng());
+  quest('floors');
   awardMedals();
 }
 
@@ -127,7 +139,7 @@ function openEvent() {
     navigate('battle');
     return;
   }
-  if (event.type === 'npc') event.opened = true;
+  if (['npc', 'altar', 'gamble'].includes(event.type)) event.opened = true;
   if (event.type === 'chest') {
     save.hero = { ...save.hero, gold: save.hero.gold + event.gold };
     message = `보물상자에서 ${event.gold}G를 얻으셨습니다.`;
@@ -160,6 +172,36 @@ function answerQuiz(value) {
   persist(); render();
 }
 
+// 제단(HP를 바치고 유물)과 동전 던지기(골드 걸기)에 답합니다.
+function answerSide(accept) {
+  const run = save.run;
+  const event = run?.events[run.step];
+  if (!['altar', 'gamble'].includes(event?.type) || !event.opened) return;
+  if (!accept) message = '그냥 지나쳤습니다.';
+  else if (event.type === 'altar') {
+    const offered = forceOffer(run, rng());
+    if (offered === run) {
+      save.hero = { ...save.hero, gold: save.hero.gold + event.gold };
+      message = `제단은 비어 있었습니다. 대신 ${event.gold}G를 주웠습니다.`; sfx('coin');
+    } else {
+      const cost = Math.floor(save.hero.hp / 4);
+      save.hero = { ...save.hero, hp: save.hero.hp - cost };
+      save.run = offered;
+      message = `HP ${cost}을 바쳤습니다. 유물을 하나 고르세요.`; sfx('miss');
+    }
+  } else {
+    const stake = Math.min(save.hero.gold, event.gold * 2);
+    const heads = rng()() < 0.5;
+    save.hero = { ...save.hero, gold: save.hero.gold + (heads ? stake : -stake) };
+    message = heads ? `앞면! ${stake}G를 땄습니다.` : `뒷면… ${stake}G를 잃었습니다.`;
+    sfx(heads ? 'coin' : 'miss');
+  }
+  save.run.step++;
+  floorDone();
+  if (notice) { message = `${message} ${notice}`; notice = ''; }
+  persist(); render();
+}
+
 function act(action) {
   if (!save.run?.battle) return;
   const before = save.run.battle;
@@ -183,6 +225,9 @@ function act(action) {
       if (next.event.instance.kind === 'ok') save.stats.phantoms++;
       save.run.combo = next.combo ?? 0;
       save.stats.maxCombo = Math.max(save.stats.maxCombo, save.run.combo);
+      if (!save.dex.includes(next.event.cardId)) save.dex.push(next.event.cardId);
+      quest('wins'); quest('combo', save.run.combo);
+      if (next.event.instance.kind === 'ok') quest('phantoms');
     } else if (next.wrong) save.run.combo = 0;
     awardMedals();
   }
@@ -279,7 +324,12 @@ function render(focus = true, animate = false, previous = null) {
   if (chapterLabel) chapterLabel.textContent = !save.run ? TOWER.name : currentChapter.endless ? `${save.run.floor}층 · ${getChapter(site).name}` : `${currentChapter.id}장 · ${currentChapter.name}`;
   const common = { hero, save, story: narrative, articles, message, onTown: () => navigate('town') };
   let screen;
-  if (page === 'town') screen = town({ ...common, onEnter: enterDungeon, onPage: navigate });
+  if (page === 'town') {
+    const today = questFor(todayKey()), daily = dailyState(save.daily, todayKey());
+    screen = town({ ...common, onEnter: enterDungeon, onPage: navigate,
+      extra: !daily.done && !questShown ? `📋 오늘의 의뢰: ${today.text} (${daily.progress}/${today.goal}) · 보상 ${today.gold}G` : null });
+    questShown = true;
+  }
   if (page === 'dungeon' && save.run) {
     const area = getChapter(save.run.chapter ?? 1);
     const floors = site === 1 ? narrative.floors : narrative.chapters[site].floors;
@@ -289,8 +339,10 @@ function render(focus = true, animate = false, previous = null) {
       floorInfo: area.endless ? { ...floorBase, name: `${save.run.floor}층 · ${floorBase.name.replace(/^\d+층 · /, '')}` } : floorBase,
       onRelic: id => { save.run = chooseRelic(save.run, id); sfx('coin'); persist(); render(false); },
       onFloorSeen: () => { save.run.uiSeenFloors = [...new Set([...(Array.isArray(save.run.uiSeenFloors) ? save.run.uiSeenFloors : []), save.run.floor])]; persist(); },
-      onNext: () => {
-        save.run = nextFloor(save.run, cards, rng());
+      onSide: answerSide,
+      onNext: (index = 0) => {
+        if ((save.run.relics ?? []).includes('battery')) save.hero = heal(save.hero, 10);
+        save.run = nextFloor(save.run, cards, rng(), Number.isInteger(index) ? index : 0);
         save.best.floor = Math.max(save.best.floor, save.run.floor);
         navigate('dungeon');
       } });
@@ -301,7 +353,11 @@ function render(focus = true, animate = false, previous = null) {
     if (!state.ui || typeof state.ui !== 'object' || Array.isArray(state.ui)) state.ui = {};
     if (!battleView) {
       battleView = { monster: monsterContent(monsters, state.event) };
-      if (state.event.affix) battleView.monster.name = `${AFFIXES[state.event.affix].label} ${battleView.monster.name}`;
+      if (state.event.affix) {
+        const affix = AFFIXES[state.event.affix];
+        battleView.monster.name = `${affix.label} ${battleView.monster.name}`;
+        battleView.monster.appear = `[${affix.label}] ${affix.desc}! ${battleView.monster.appear}`;
+      }
     }
     screen = battle({ state, monster: battleView.monster, bagOpen, articles, animate, previous, entering: focus && !animate, tutorial: !save.tutorialDone,
       presentation: state.ui, pending: Array.isArray(state.ui.messages) ? state.ui.messages : [],
@@ -338,7 +394,8 @@ function render(focus = true, animate = false, previous = null) {
   if (page === 'senior') screen = senior({ ...common, seen: save.story.seen, onRead: id => { markSeen(id); persist(); render(false); },
     onPrologue: () => { storyId = 'prologue'; navigate('story'); } });
   if (page === 'skillbook') screen = skillbook({ ...common, skills: save.skills, onArticle: showArticle });
-  if (page === 'status') screen = statusScreen({ ...common, best: save.best,
+  if (page === 'status') screen = statusScreen({ ...common, best: save.best, total: cards.length,
+    quest: { ...questFor(todayKey()), ...dailyState(save.daily, todayKey()) },
     onLevel: () => { levelReturn = 'status'; navigate('levelup'); },
     onJob: () => { levelReturn = 'status'; navigate('job'); }, onUse: id => {
       if (!CONSUMABLES[id]?.hp || save.hero.hp === save.hero.maxHp) return;
@@ -349,12 +406,13 @@ function render(focus = true, animate = false, previous = null) {
   if (page === 'story') {
     const chapter = /^ch([234])_/.exec(storyId)?.[1];
     const clear = storyId === 'boss_clear' || /^ch[23]_clear$/.test(storyId);
-    screen = storyScreen({ title: clear ? `${chapter === '3' ? 'DLC · ' : ''}${chapter ?? 1}장 클리어!` :
+    const merged = clear && !!save.run && !!getChapter(save.run.chapter ?? 1).endless;
+    screen = storyScreen({ title: merged ? `${['첫', '두', '세'][Number(chapter ?? 1) - 1]} 번째 우두머리 격파!` : clear ? `${chapter === '3' ? 'DLC · ' : ''}${chapter ?? 1}장 클리어!` :
       chapter ? narrative.chapters[chapter].title : '신입 감독관의 첫날',
       lines: narrative[storyId], reward: storyReward,
       teaser: clear ? chapter ? narrative.chapters[chapter].teaser : narrative.chapter2_teaser : null,
-      teaserTitle: chapter === '3' ? '엔딩 뒷이야기' : `${chapter ? 3 : 2}장 예고`,
-      doneLabel: chapter && !clear ? '던전으로' : '지청으로', onDone: finishStory });
+      teaserTitle: merged ? '더 깊은 곳으로' : chapter === '3' ? '엔딩 뒷이야기' : `${chapter ? 3 : 2}장 예고`,
+      doneLabel: merged || chapter && !clear ? '던전으로' : '지청으로', onDone: finishStory });
   }
   if (screen && !['battle', 'town', 'dungeon'].includes(page)) screen = fitScreen(screen);
   disposeScreen = screen?.dispose;
@@ -407,7 +465,8 @@ async function boot() {
     }
     catch { storageFailed = true; announce('저장소에 접근할 수 없습니다. 현재 창에서 진행해 주세요.'); }
     if (save.hero.hp === 0 && !save.run?.battle) { save.hero = faint(save.hero); wasFaint = true; }
-    const pendingIntro = save.run?.chapter > 1 && !save.story.seen.includes(`ch${save.run.chapter}_intro`);
+    // 도입 이야기는 예전 방식(2·3장)으로 진행 중이던 탐험에만 남아 있습니다.
+    const pendingIntro = [2, 3].includes(save.run?.chapter) && !save.story.seen.includes(`ch${save.run.chapter}_intro`);
     if (pendingIntro) storyId = `ch${save.run.chapter}_intro`;
     page = !save.story.seen.includes('prologue') || pendingIntro ? 'story' : save.run?.battle ? 'battle' : save.run ? 'dungeon' : wasFaint ? 'inn' : 'town';
     persist(); render(); offlineSetup();

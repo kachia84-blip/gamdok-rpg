@@ -8,7 +8,7 @@ export function startBattle(hero, event, skills, rng, { relics = [], combo = 0 }
   const battle = { hero: structuredClone(hero), skills: [...skills], event: structuredClone(event),
     monster: { hp: event.maxHp, maxHp: event.maxHp, attack: event.attack, lv: event.lv },
     phase: 'action', attempts: 0, wrong: false, revealed: null, hiddenChoices: [],
-    weakness: rng() < Math.min(1, effectiveStats(hero, relics).eye * 0.04), log: ['몬스터가 나타났습니다.'],
+    weakness: rng() < Math.min(1, effectiveStats(hero, relics).eye * 0.04) || relics.includes('glasses'), log: ['몬스터가 나타났습니다.'],
     effect: null, reward: null, relics: [...relics], combo, guard: relics.includes('shield') ? 1 : 0 };
   const wrongChoices = event.choices.filter(value => value !== event.instance.article);
   if (hero.job === 'scholar' && wrongChoices.length > 1) battle.hiddenChoices = [pick(rng, wrongChoices)];
@@ -44,8 +44,10 @@ function win(battle, rng, phantom = false) {
   // 연속 승리: 실수 없이 이긴 횟수만큼 보상이 10%씩(최대 50%) 늘어납니다.
   const streak = 1 + 0.1 * Math.min(5, battle.combo ?? 0);
   battle.combo = battle.wrong ? 0 : (battle.combo ?? 0) + 1;
-  const exp = Math.round((phantom ? 4 + floor * 2 : (10 + floor * 5) * (boss ? 3 : 1)) * streak * (affix === 'fierce' ? 1.5 : 1));
-  const gold = phantom ? 0 : Math.round((6 + floor * 4 + stats.talk) * (boss ? 3 : 1) * streak *
+  const danger = battle.event.danger ? 1.5 : 1;
+  const exp = Math.round((phantom ? 4 + floor * 2 : (10 + floor * 5) * (boss ? 3 : 1)) * streak * (affix === 'fierce' ? 1.5 : affix === 'swift' ? 1.3 : 1) *
+    (relics.includes('stamp') ? 1.3 : 1) * danger);
+  const gold = phantom ? (relics.includes('candle') ? 30 : 0) : Math.round(danger * (6 + floor * 4 + stats.talk) * (boss ? 3 : 1) * streak *
     (affix === 'golden' ? 3 : 1) * (relics.includes('purse') ? 1.5 : 1) * (battle.hero.job === 'talker' ? 1.3 : 1));
   const gained = gainExp({ ...battle.hero, gold: battle.hero.gold + gold }, exp);
   battle.hero = gained.hero;
@@ -144,7 +146,8 @@ export function battleAction(before, action, rng) {
     return battle;
   }
   if (action.type === 'flee') {
-    if (rng() < Math.min(1, 0.5 + stats.eye * 0.05)) { battle.phase = 'fled'; log(battle, '도망에 성공하셨습니다.'); }
+    if (battle.event.affix === 'swift') { log(battle, '재빠른 몬스터라 도망칠 수 없습니다.'); counter(battle); }
+    else if (rng() < Math.min(1, 0.5 + stats.eye * 0.05) || (battle.relics ?? []).includes('whistle')) { battle.phase = 'fled'; log(battle, '도망에 성공하셨습니다.'); }
     else { log(battle, '도망길이 막혔습니다.'); counter(battle); }
     return battle;
   }
