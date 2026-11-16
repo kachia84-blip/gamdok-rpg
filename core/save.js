@@ -35,7 +35,8 @@ function validRebuttal(r) {
 function validEvent(event) {
   if (!record(event) || !integer(event.chapter === undefined ? 1 : event.chapter, 1, 4) ||
       !integer(event.power === undefined ? 0 : event.power, 0, 20) ||
-      event.affix !== undefined && !Object.hasOwn(AFFIXES, event.affix)) return false;
+      event.affix !== undefined && !Object.hasOwn(AFFIXES, event.affix) ||
+      event.site !== undefined && !integer(event.site, 1, 3)) return false;
   const top = event.chapter === 4 ? MAX_FLOOR : 6;
   if (event.type === 'battle') {
     const instance = event.instance;

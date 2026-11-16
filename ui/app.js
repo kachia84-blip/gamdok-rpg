@@ -2,7 +2,7 @@
 import { emptySave, parseSave, STORAGE_KEY } from '../core/save.js';
 import { makeRng } from '../core/rng.js';
 import { allocatePoint, faint, heal, xpNeeded, GEAR } from '../core/hero.js';
-import { getChapter, unlockedChapters } from '../core/chapters.js';
+import { getChapter, startFloors, TOWER, BOSS_EVERY } from '../core/chapters.js';
 import { startDungeon, nextFloor, rememberWrong, rpgCards, AFFIXES } from '../core/dungeon.js';
 import { offerRelics, chooseRelic } from '../core/relics.js';
 import { canChooseJob, chooseJob } from '../core/jobs.js';
@@ -99,13 +99,10 @@ function showArticle(no, explanation = null) {
   dialog.showModal();
 }
 
-function enterDungeon(chapter = 1) {
+function enterDungeon(startFloor = 1) {
   if (!save.run) {
-    if (!unlockedChapters(save.cleared).some(area => area.id === chapter)) return;
-    save.run = startDungeon(cards, rng(), save.revived, chapter);
-    if (chapter > 1 && !save.story.seen.includes(`ch${chapter}_intro`)) {
-      storyId = `ch${chapter}_intro`; navigate('story'); return;
-    }
+    if (!startFloors(save.cleared).includes(startFloor)) return;
+    save.run = startDungeon(cards, rng(), save.revived, TOWER.id, startFloor);
   }
   save.best.floor = Math.max(save.best.floor, save.run.floor);
   navigate(save.run.battle ? 'battle' : 'dungeon');
@@ -205,6 +202,21 @@ function continueBattle() {
     return;
   }
   if (save.hero.points > 0) { levelReturn = 'battle'; navigate('levelup'); return; }
+  const turn = state.event.floor / BOSS_EVERY;
+  if (state.phase === 'won' && state.event.boss && getChapter(state.event.chapter ?? 1).endless && turn <= 3 && !save.cleared.includes(turn)) {
+    // 합친 던전의 1~3번째 보스를 처음 잡았을 때: 클리어 기록·보상·이야기 뒤 계속 내려갑니다.
+    save.cleared.push(turn);
+    storyReward = null;
+    const id = turn === 2 ? 'compass' : turn === 3 ? 'badge' : null;
+    if (id) {
+      save.hero = { ...save.hero, gear: { ...save.hero.gear, [GEAR[id].slot]: id } };
+      storyReward = `${GEAR[id].name}을 받았습니다`;
+    }
+    save.run.step++; save.run.battle = null; battleView = null;
+    floorDone();
+    storyId = turn === 1 ? 'boss_clear' : `ch${turn}_clear`;
+    navigate('story'); return;
+  }
   if (state.phase === 'won' && state.event.boss && !getChapter(state.event.chapter ?? 1).endless) {
     const chapter = state.event.chapter ?? 1;
     storyReward = state.ui?.chapterReward ?? null;
@@ -239,7 +251,9 @@ function finishStory() {
   }
   if (storyId === 'boss_clear' || /^ch[23]_clear$/.test(storyId)) {
     if (storyId === 'boss_clear') markSeen('chapter2_teaser');
-    save.run = null; storyReward = null; battleView = null;
+    storyReward = null; battleView = null;
+    if (save.run && !save.run.battle && getChapter(save.run.chapter ?? 1).endless) { navigate('dungeon'); return; }
+    save.run = null;
   }
   navigate('town');
 }
@@ -260,14 +274,15 @@ function render(focus = true, animate = false, previous = null) {
       title: `경험치 ${hero.exp} / ${xpNeeded(hero.lv)}` },
     h('div', { className: 'xp-fill', style: `transform:scaleX(${Math.min(1, hero.exp / xpNeeded(hero.lv))})` })), soundButton);
   const chapterLabel = document.querySelector('.brand span:last-child');
-  const currentChapter = getChapter(save.run?.chapter ?? 1);
-  if (chapterLabel) chapterLabel.textContent = `${currentChapter.id}장 · ${currentChapter.name}`;
+  const currentChapter = getChapter(save.run?.chapter ?? TOWER.id);
+  const site = currentChapter.endless ? save.run?.events[0]?.site ?? 1 : currentChapter.id;
+  if (chapterLabel) chapterLabel.textContent = !save.run ? TOWER.name : currentChapter.endless ? `${save.run.floor}층 · ${getChapter(site).name}` : `${currentChapter.id}장 · ${currentChapter.name}`;
   const common = { hero, save, story: narrative, articles, message, onTown: () => navigate('town') };
   let screen;
   if (page === 'town') screen = town({ ...common, onEnter: enterDungeon, onPage: navigate });
   if (page === 'dungeon' && save.run) {
     const area = getChapter(save.run.chapter ?? 1);
-    const floors = area.id === 1 ? narrative.floors : narrative.chapters[area.id].floors;
+    const floors = site === 1 ? narrative.floors : narrative.chapters[site].floors;
     const floorBase = floors[(save.run.floor - 1) % floors.length];
     screen = dungeon({ ...common, story: { ...narrative, floors }, run: save.run, onEvent: openEvent, onTown: returnTown, onQuiz: answerQuiz,
       endless: !!area.endless,
@@ -279,7 +294,7 @@ function render(focus = true, animate = false, previous = null) {
         save.best.floor = Math.max(save.best.floor, save.run.floor);
         navigate('dungeon');
       } });
-    screen.querySelector('header').querySelector('p').textContent = `${area.id}장 · ${area.name}`;
+    screen.querySelector('header').querySelector('p').textContent = area.endless ? getChapter(site).name : `${area.id}장 · ${area.name}`;
   }
   if (page === 'battle' && save.run?.battle) {
     const state = save.run.battle;
@@ -348,7 +363,7 @@ function render(focus = true, animate = false, previous = null) {
     ['battle', 'dungeon'].includes(page) && save.run ?
       page === 'battle' && save.run.battle?.event.boss ? 'boss' : `floor-${(save.run.floor - 1) % 6 + 1}` : 'town';
   root.replaceChildren(sceneScreen(screen ?? h('p', {}, '마을로 이동해 주세요.'), scene,
-    ['battle', 'dungeon'].includes(page) ? save.run?.chapter ?? 1 : 1));
+    ['battle', 'dungeon'].includes(page) && save.run ? site : 1));
   document.body.classList.toggle('in-battle', page === 'battle');
   if (focus) { window.scrollTo(0, 0); root.querySelector('h1')?.focus({ preventScroll: true }); }
 }

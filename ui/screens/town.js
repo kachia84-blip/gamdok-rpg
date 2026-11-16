@@ -3,15 +3,15 @@ import { TOWN_MAP, TOWN_START, TOWN_BUILDINGS, findPath } from '../../core/townm
 import { reducedMotion, sfx } from '../fx.js';
 import { msgbox } from './msgbox.js';
 import { chooseLine } from '../content.js';
-import { unlockedChapters } from '../../core/chapters.js';
+import { startFloors } from '../../core/chapters.js';
 import { chapters } from './chapters.js';
 
 export function town({ save, story, onEnter, onPage, message }) {
   let position = { ...TOWN_START };
   let walking = false, disposed = false, timer;
   const enter = () => {
-    if (save.run || unlockedChapters(save.cleared).length === 1) { onEnter(1); return; }
-    const chooser = chapters({ cleared: save.cleared, tower: save.best.tower ?? 0, onSelect: onEnter, onClose: () => {
+    if (save.run || startFloors(save.cleared).length === 1) { onEnter(1); return; }
+    const chooser = chapters({ starts: startFloors(save.cleared), best: save.best.tower ?? 0, onSelect: onEnter, onClose: () => {
       overlay.hidden = true; overlay.replaceChildren(); map.inert = false;
       map.querySelectorAll('button').forEach(item => { if (item.dataset.building === 'dungeon') item.focus({ preventScroll: true }); });
     } });

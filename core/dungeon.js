@@ -1,6 +1,6 @@
 import { instantiate, supports, satisfies } from './cardgen.js';
 import { pick, shuffle } from './rng.js';
-import { AREAS, chapterCards, getChapter } from './chapters.js';
+import { AREAS, BOSS_EVERY, CHAPTERS, chapterCards, getChapter } from './chapters.js';
 
 export const AFFIXES = {
   fierce: { label: '사나운', desc: '공격이 거세지만 경험치 1.5배' },
@@ -10,7 +10,7 @@ export const AFFIXES = {
 export const MAX_FLOOR = 999;
 export const rpgCards = cards => cards.filter(card => AREAS.some(chapter => chapter.fields.includes(card.field)));
 
-export function encounter(card, floor, rng, { revived, boss = false, cards = [], chapter = 1 } = {}) {
+export function encounter(card, floor, rng, { revived, boss = false, cards = [], chapter = 1, site } = {}) {
   const area = getChapter(chapter);
   const pool = chapterCards(cards, area.id);
   if (!area.fields.includes(card.field)) throw new Error('이 장의 전투 카드가 아닙니다.');
@@ -23,7 +23,7 @@ export function encounter(card, floor, rng, { revived, boss = false, cards = [],
   }
   const allowEdge = floor >= 3 || !!revived;
   if (!supports(source, wantViolation, allowEdge)) wantViolation = !wantViolation;
-  const instance = instantiate(source, area.name, rng, { wantViolation, allowEdge });
+  const instance = instantiate(source, area.endless ? getChapter(site ?? 1).name : area.name, rng, { wantViolation, allowEdge });
   const same = [...new Set(pool.filter(c => c.field === card.field).map(c => c.article))].filter(a => a !== card.article);
   const nearby = [...new Set(pool.map(c => c.article))].filter(a => a !== card.article && !same.includes(a));
   const choices = shuffle(rng, [card.article, ...shuffle(rng, same).concat(shuffle(rng, nearby)).slice(0, 3)]);
@@ -34,33 +34,38 @@ export function encounter(card, floor, rng, { revived, boss = false, cards = [],
   return { type: 'battle', cardId: card.id, v: instance.v, field: card.field, instance,
     choices, floor, chapter: area.id, power: area.power, boss, revived: !!revived, lv: effectiveFloor + (boss ? 2 : 0),
     maxHp: hp, attack: Math.round((4 + effectiveFloor * 2 + (boss ? 3 : 0)) * (affix === 'fierce' ? 1.4 : 1)),
-    ...(affix ? { affix } : {}) };
+    ...(affix ? { affix } : {}), ...(area.endless ? { site: site ?? 1 } : {}) };
 }
 
-export function generateFloor(cards, floor, rng, revived = [], chapter = 1) {
+export function generateFloor(cards, floor, rng, revived = [], chapter = 1, site) {
   const area = getChapter(chapter);
   const pool = chapterCards(cards, area.id);
   if (!pool.length) throw new Error('전투 카드가 없습니다.');
   const at = Math.max(1, Math.min(area.endless ? MAX_FLOOR : 6, Math.floor(floor)));
-  const returning = at === 1 ? shuffle(rng, revived.filter(r => pool.some(c => c.id === r.cardId))).slice(0, 2) : [];
+  // 합친 던전은 층마다 현장이 무작위입니다. 1~3번째 보스 층은 그 보스의 현장으로 고정합니다.
+  const turn = at / BOSS_EVERY;
+  if (area.endless) site ??= Number.isInteger(turn) && turn <= CHAPTERS.length ? turn : 1 + Math.floor(rng() * CHAPTERS.length);
+  const returning = at === 1 || area.endless ? shuffle(rng, revived.filter(r => pool.some(c => c.id === r.cardId))).slice(0, 2) : [];
   const fights = [0, 1].map(index => {
     const memory = returning[index];
     const card = memory ? pool.find(c => c.id === memory.cardId) : pick(rng, pool);
-    return encounter(card, at, rng, { revived: memory, boss: (area.endless ? at % 5 === 0 : at === 6) && index === 1, cards: pool, chapter: area.id });
+    return encounter(card, at, rng, { revived: memory, boss: (area.endless ? at % BOSS_EVERY === 0 : at === 6) && index === 1, cards: pool, chapter: area.id, site });
   });
   const type = pick(rng, ['chest', 'rest', 'npc']);
-  let extra = { type, chapter: area.id, power: area.power, gold: 8 + at * 4, hp: 8 + at * 3 };
+  let extra = { type, chapter: area.id, power: area.power, gold: 8 + at * 4, hp: 8 + at * 3, ...(area.endless ? { site } : {}) };
   if (type === 'npc') {
     const card = pick(rng, pool);
-    const sample = encounter(card, at, rng, { cards: pool, chapter: area.id });
+    const sample = encounter(card, at, rng, { cards: pool, chapter: area.id, site });
     extra = { ...extra, text: sample.instance.text, article: card.article, choices: sample.choices, quote: card.quote };
   }
   return [fights[0], extra, fights[1]];
 }
 
-export function startDungeon(cards, rng, revived = [], chapter = 1) {
-  chapter = getChapter(chapter).id;
-  return { chapter, floor: 1, step: 0, events: generateFloor(cards, 1, rng, revived, chapter), battle: null,
+export function startDungeon(cards, rng, revived = [], chapter = 1, startFloor = 1) {
+  const area = getChapter(chapter);
+  chapter = area.id;
+  const floor = area.endless ? Math.max(1, Math.min(MAX_FLOOR, Math.floor(startFloor) || 1)) : 1;
+  return { chapter, floor, step: 0, events: generateFloor(cards, floor, rng, revived, chapter), battle: null,
     relics: [], relicOffer: null, combo: 0 };
 }
 

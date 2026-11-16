@@ -1,4 +1,4 @@
-import { AREAS, getChapter } from '../core/chapters.js';
+import { AREAS, BOSS_EVERY, getChapter } from '../core/chapters.js';
 
 const lines = (value, fallback) => Array.isArray(value) && value.length && value.every(x => typeof x === 'string') ? value : fallback;
 const text = (value, fallback) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -60,7 +60,10 @@ export function monsterContent(raw, event) {
     }
   }
   const bosses = Array.isArray(chapter.bosses) ? chapter.bosses.filter(record) : [];
-  const boss = bosses.length ? bosses[(Math.ceil(event.floor / 5) - 1) % bosses.length] : record(chapter.boss) ? chapter.boss : {};
+  // 합친 던전: 1~3번째 보스는 각 장의 보스, 그 뒤는 문지기들이 돌아가며 나옵니다.
+  const turn = Math.ceil(event.floor / BOSS_EVERY);
+  const boss = area.endless && turn <= 3 && record(raw?.[`chapter${turn}`]?.boss) ? raw[`chapter${turn}`].boss :
+    bosses.length ? bosses[Math.max(0, turn - 4) % bosses.length] : record(chapter.boss) ? chapter.boss : {};
   const selected = event.boss ? boss : source;
   return { name: text(selected.name, event.boss ? area.id === 1 ? '고층 빌딩의 그림자' : `${area.name}의 그림자` : '현장의 망령'), emoji: text(selected.emoji, '🪖'),
     title: text(selected.title, event.boss ? `${event.floor}층의 지배자` : ''),

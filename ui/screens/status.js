@@ -8,7 +8,7 @@ export function status({ hero, best, save, onLevel, onJob, onUse, onTown, messag
   const stats = effectiveStats(hero);
   return h('div', { className: 'status-screen' }, heading('신입 감독관', '📊 능력치'), panel(h('h2', {}, `Lv${hero.lv}${hero.job ? ` · ${JOBS[hero.job].name}` : ''}`),
     h('p', {}, `클리어: ${(save.cleared ?? []).map(chapter => `${chapter}장 ✅`).join(' ') || '없음'}`),
-    h('p', {}, `경험치 ${hero.exp} / ${xpNeeded(hero.lv)} · 최고 도달 ${best.floor}층${best.tower ? ` · 탑 ${best.tower}층` : ''} · 습득 조문 ${save.skills.length}개`),
+    h('p', {}, `경험치 ${hero.exp} / ${xpNeeded(hero.lv)} · 최고 도달 ${best.floor}층 · 습득 조문 ${save.skills.length}개`),
     h('p', {}, `🎖️ 훈장 ${medals.length}/${MEDALS.length}${upcoming ? ` · 다음: ${upcoming.hint}` : ''}`),
     h('p', {}, `법지식 ${stats.law} · 관찰력 ${stats.eye} · 설득력 ${stats.talk} · 방어 ${stats.defense}`),
     hero.points > 0 && button(`포인트 배분 (${hero.points})`, onLevel, { className: 'primary full' }),
