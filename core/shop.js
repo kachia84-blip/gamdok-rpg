@@ -5,6 +5,7 @@ export const CONSUMABLES = {
   tonic: { name: '🥤 박카스', price: 30, hp: 40, tier: 1 },
   tape: { name: '📏 줄자', price: 25, tier: 1 },
   notebook: { name: '📖 법전 수첩', price: 35, tier: 1 },
+  extinguisher: { name: '🧯 휴대 소화기', price: 45, tier: 2 },
   lunch: { name: '🍱 현장 도시락', price: 50, hp: 80, tier: 2 },
   kit: { name: '🧰 응급 키트', price: 120, hp: 200, tier: 3 },
 };

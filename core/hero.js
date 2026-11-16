@@ -11,23 +11,32 @@ export const GEAR = {
   insulated: { name: '🧤 절연 보호구 세트', slot: 'head', defense: 8, price: 600, tier: 3 },
   rulings: { name: '⚖️ 대법원 판결집', slot: 'hand', law: 12, price: 700, tier: 3 },
   thermal: { name: '📸 열화상 카메라', slot: 'tool', eye: 11, price: 650, tier: 3 },
+  goggles: { name: '🥽 스마트 보안경', slot: 'head', defense: 12, price: 1300, tier: 4 },
+  casebook: { name: '🗂️ 중대재해 사례집', slot: 'hand', law: 17, price: 1500, tier: 4 },
+  drone: { name: '🛰️ 점검 드론', slot: 'tool', eye: 15, price: 1400, tier: 4 },
   compass: { name: '🧭 선배의 나침반', slot: 'tool', eye: 9, talk: 3, price: 0, tier: 2, rare: true },
+  pen: { name: '🖋️ 전설의 만년필', slot: 'hand', law: 18, eye: 4, talk: 6, price: 0, tier: 4, rare: true },
   badge: { name: '🏅 명예 감독관 배지', slot: 'head', defense: 7, law: 4, talk: 4, price: 0, tier: 3, rare: true },
 };
 
+import { RELICS } from './relics.js';
+
 export function createHero() {
   return { lv: 1, exp: 0, hp: 30, maxHp: 30, stats: { law: 3, eye: 3, talk: 3 },
-    points: 0, gold: 20, gear: { head: null, hand: null, tool: null }, bag: {} };
+    points: 0, gold: 20, gear: { head: null, hand: null, tool: null }, bag: {}, job: null };
 }
 
 export const xpNeeded = lv => Math.round(20 * lv ** 1.5);
 
-export function effectiveStats(hero) {
+export function effectiveStats(hero, relics = []) {
   const stats = { ...hero.stats, defense: 0 };
   for (const [slot, id] of Object.entries(hero.gear)) {
     const item = GEAR[id];
     if (item?.slot !== slot) continue;
     for (const key of ['law', 'eye', 'talk', 'defense']) stats[key] += item[key] ?? 0;
+  }
+  for (const id of relics) {
+    for (const key of ['law', 'eye', 'talk', 'defense']) stats[key] += RELICS[id]?.[key] ?? 0;
   }
   return stats;
 }

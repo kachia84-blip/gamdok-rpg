@@ -4,18 +4,29 @@ import { shuffle, pick } from './rng.js';
 
 export const ended = battle => ['won', 'lost', 'fled'].includes(battle.phase);
 
-export function startBattle(hero, event, skills, rng) {
-  return { hero: structuredClone(hero), skills: [...skills], event: structuredClone(event),
+export function startBattle(hero, event, skills, rng, { relics = [], combo = 0 } = {}) {
+  const battle = { hero: structuredClone(hero), skills: [...skills], event: structuredClone(event),
     monster: { hp: event.maxHp, maxHp: event.maxHp, attack: event.attack, lv: event.lv },
     phase: 'action', attempts: 0, wrong: false, revealed: null, hiddenChoices: [],
-    weakness: rng() < Math.min(1, effectiveStats(hero).eye * 0.04), log: ['몬스터가 나타났습니다.'],
-    effect: null, reward: null };
+    weakness: rng() < Math.min(1, effectiveStats(hero, relics).eye * 0.04), log: ['몬스터가 나타났습니다.'],
+    effect: null, reward: null, relics: [...relics], combo, guard: relics.includes('shield') ? 1 : 0 };
+  const wrongChoices = event.choices.filter(value => value !== event.instance.article);
+  if (hero.job === 'scholar' && wrongChoices.length > 1) battle.hiddenChoices = [pick(rng, wrongChoices)];
+  if (hero.job === 'scout' && rng() < 0.3) battle.revealed = event.instance.kind === 'ok';
+  return battle;
 }
+
+const statsOf = battle => effectiveStats(battle.hero, battle.relics ?? []);
 
 function log(battle, message) { battle.log.push(message); }
 
 function counter(battle, multiplier = 1) {
-  const damage = Math.max(1, Math.round(battle.monster.attack * multiplier) - effectiveStats(battle.hero).defense);
+  if (battle.guard > 0) {
+    battle.guard--; battle.effect = null;
+    log(battle, '🛡️ 반격을 막아 냈습니다!');
+    return;
+  }
+  const damage = Math.max(1, Math.round(battle.monster.attack * multiplier) - statsOf(battle).defense);
   battle.hero.hp = Math.max(0, battle.hero.hp - damage);
   battle.effect = { target: 'hero', damage };
   log(battle, `반격! HP가 ${damage} 줄었습니다.`);
@@ -27,22 +38,30 @@ function win(battle, rng, phantom = false) {
   battle.monster.hp = 0;
   const { boss, instance } = battle.event;
   const floor = battle.event.floor + (battle.event.power ?? 0);
-  const stats = effectiveStats(battle.hero);
-  const exp = phantom ? 4 + floor * 2 : (10 + floor * 5) * (boss ? 3 : 1);
-  const gold = phantom ? 0 : (6 + floor * 4 + stats.talk) * (boss ? 3 : 1);
+  const stats = statsOf(battle);
+  const relics = battle.relics ?? [];
+  const affix = battle.event.affix;
+  // 연속 승리: 실수 없이 이긴 횟수만큼 보상이 10%씩(최대 50%) 늘어납니다.
+  const streak = 1 + 0.1 * Math.min(5, battle.combo ?? 0);
+  battle.combo = battle.wrong ? 0 : (battle.combo ?? 0) + 1;
+  const exp = Math.round((phantom ? 4 + floor * 2 : (10 + floor * 5) * (boss ? 3 : 1)) * streak * (affix === 'fierce' ? 1.5 : 1));
+  const gold = phantom ? 0 : Math.round((6 + floor * 4 + stats.talk) * (boss ? 3 : 1) * streak *
+    (affix === 'golden' ? 3 : 1) * (relics.includes('purse') ? 1.5 : 1) * (battle.hero.job === 'talker' ? 1.3 : 1));
   const gained = gainExp({ ...battle.hero, gold: battle.hero.gold + gold }, exp);
   battle.hero = gained.hero;
   const learned = !phantom && !battle.skills.includes(instance.article);
   if (learned) battle.skills.push(instance.article);
   let drop = null;
-  if (!phantom && rng() < 0.25) {
+  if (!phantom && rng() < (relics.includes('clover') ? 0.5 : 0.25)) {
     const id = pick(rng, Object.keys(CONSUMABLES).filter(id => CONSUMABLES[id].tier <= (battle.event.chapter ?? 1)));
     const next = grantItem(battle.hero, id);
     if (next !== battle.hero) { battle.hero = next; drop = id; }
   }
-  battle.reward = { exp, gold, levels: gained.levels, learned, drop };
+  if (relics.includes('thermos')) battle.hero = { ...battle.hero, hp: Math.min(battle.hero.maxHp, battle.hero.hp + 5) };
+  battle.reward = { exp, gold, levels: gained.levels, learned, drop, combo: battle.combo };
   log(battle, phantom ? `환영 소멸! ${instance.why}` : '몬스터를 물리치셨습니다!');
   log(battle, `경험치 +${exp} · ${gold}G 획득`);
+  if (battle.combo >= 2) log(battle, `🔥 ${battle.combo}연속 승리!`);
   if (learned) log(battle, `📜 ${instance.article} 스킬을 습득하셨습니다.`);
   if (drop) log(battle, `${CONSUMABLES[drop].name} 획득`);
   if (gained.levels) log(battle, `레벨업! Lv${battle.hero.lv} · 능력치 포인트 +${gained.levels * 3}`);
@@ -61,7 +80,8 @@ export function battleAction(before, action, rng) {
   const battle = structuredClone(before);
   const { instance } = battle.event;
   const phantom = instance.kind === 'ok';
-  const stats = effectiveStats(battle.hero);
+  const stats = statsOf(battle);
+  const chances = battle.event.affix === 'stubborn' ? 1 : 2;
   battle.effect = null;
   if (action.type === 'cancel' && battle.phase === 'cite') { battle.phase = 'action'; return battle; }
   if (action.type === 'slash' && battle.phase === 'action') { battle.phase = 'cite'; return battle; }
@@ -95,9 +115,9 @@ export function battleAction(before, action, rng) {
       log(battle, `💥 반박 치명타! ${damage} 피해`); win(battle, rng);
     } else {
       battle.wrong = true; battle.attempts++;
-      log(battle, battle.attempts < 2 ? '반박이 막혔습니다. 한 번 더 도전해 주세요.' : `반박 기회를 소진하셨습니다. ${rebuttal.explain}`);
-      counter(battle);
-      if (battle.phase !== 'lost' && battle.attempts >= 2) battle.phase = 'action';
+      log(battle, battle.attempts < chances ? '반박이 막혔습니다. 한 번 더 도전해 주세요.' : `반박 기회를 소진하셨습니다. ${rebuttal.explain}`);
+      counter(battle, battle.hero.job === 'talker' ? 0.5 : 1);
+      if (battle.phase !== 'lost' && battle.attempts >= chances) battle.phase = 'action';
     }
     return battle;
   }
@@ -106,19 +126,21 @@ export function battleAction(before, action, rng) {
     if (!Object.hasOwn(CONSUMABLES, id) || !(battle.hero.bag[id] > 0)) return before;
     if (CONSUMABLES[id].hp && battle.hero.hp === battle.hero.maxHp) return before;
     if (id === 'tape' && battle.revealed !== null) return before;
-    if (id === 'notebook' && (battle.hiddenChoices.length || battle.phase !== 'cite')) return before;
+    if (id === 'notebook' && (battle.hiddenChoices.length >= 2 || battle.phase !== 'cite')) return before;
+    if (id === 'extinguisher' && battle.guard > 0) return before;
     battle.hero = consume(battle.hero, id);
     if (id === 'tape') { battle.revealed = phantom; log(battle, phantom ? '📏 환영입니다. 간파해 주세요.' : '📏 진짜 위험입니다. 조문으로 맞서 주세요.'); }
     else if (id === 'notebook') {
-      battle.hiddenChoices = shuffle(rng, battle.event.choices.filter(a => a !== instance.article)).slice(0, 2);
+      const rest = battle.event.choices.filter(a => a !== instance.article && !battle.hiddenChoices.includes(a));
+      battle.hiddenChoices = [...battle.hiddenChoices, ...shuffle(rng, rest).slice(0, 2 - battle.hiddenChoices.length)];
       log(battle, '📖 조문 보기 두 개를 지웠습니다.');
-    } else log(battle, `${CONSUMABLES[id].name} 사용 · HP 회복`);
+    } else if (id === 'extinguisher') { battle.guard = 1; log(battle, '🧯 다음 반격 한 번을 막을 준비를 했습니다.'); } else log(battle, `${CONSUMABLES[id].name} 사용 · HP 회복`);
     return battle;
   }
   if (battle.phase !== 'action') return before;
   if (action.type === 'insight') {
     if (phantom) win(battle, rng, true);
-    else { battle.wrong = true; log(battle, '방심했다! 진짜 위험의 치명 반격입니다.'); counter(battle, 2); }
+    else { battle.wrong = true; log(battle, '방심했다! 진짜 위험의 치명 반격입니다.'); counter(battle, battle.hero.job === 'scout' ? 1 : 2); }
     return battle;
   }
   if (action.type === 'flee') {
