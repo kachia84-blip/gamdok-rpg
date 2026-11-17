@@ -1,5 +1,5 @@
 ﻿importScripts('./fonts/files.js');
-const CACHE_NAME = 'gamdok-v22';
+const CACHE_NAME = 'gamdok-v23';
 const OPTIONAL_FILES = ['./data/monsters.json', './data/story.json', './scenery.css'];
 const FILES = [
   './', './index.html', './style.css', './game.css', './manifest.webmanifest', './icon.svg', './package.json', './sw.js',

@@ -143,7 +143,7 @@ button.secondary{background:#1c253d;border-color:#687492;color:#f5efe0}
 @keyframes shadow-exit{from{transform:scaleX(1);opacity:.8}to{transform:scaleX(.4);opacity:0}}
 @keyframes hit-flash{0%,45%{opacity:1}25%,100%{opacity:0}}
 @keyframes blade-sweep{0%{transform:translate(-20%,20%) scaleX(.2);opacity:0}30%{transform:translate(0,0) scaleX(1);opacity:1}100%{transform:translate(20%,-20%) scaleX(1.1);opacity:0}}
-@keyframes critical-zoom{0%,100%{transform:scale(1)}30%{transform:scale(1.018)}}
+@keyframes critical-zoom{0%,34%,100%{transform:scale(1)}42%{transform:scale(1.07)}60%{transform:scale(1.02)}}
 @keyframes insight-ripple{0%{transform:scale(.1);opacity:0}20%{opacity:1}100%{transform:scale(1.8);opacity:0}}
 @keyframes banner-drop{from{transform:translateY(-18px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes sparkle{0%,100%{transform:scale(.55) rotate(0);opacity:.35}50%{transform:scale(1.1) rotate(90deg);opacity:1}}
