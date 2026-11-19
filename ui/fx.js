@@ -109,27 +109,27 @@ export function shake(el, strong = false) {
 export const IMPACT_MS = 180;
 const later = (ms, run) => { if (reducedMotion()) run(); else setTimeout(run, ms); };
 
-// 맞은 자리에서 사방으로 튀는 불꽃과 퍼지는 고리.
-export function burst(host, count = 8, kind = '') {
-  if (!host?.append || reducedMotion()) return;
-  const doc = host.ownerDocument ?? globalThis.document;
-  const layer = doc.createElement('span');
-  layer.className = `fx-burst ${kind}`.trim();
-  layer.setAttribute('aria-hidden', 'true');
-  const ring = doc.createElement('span');
-  ring.className = 'fx-ring';
-  layer.append(ring);
-  for (let i = 0; i < count; i++) {
-    const spark = doc.createElement('span');
-    const angle = (i / count) * Math.PI * 2 + Math.random() * .6;
-    const reach = (kind === 'crit' || kind === 'ko' ? 40 : 26) + Math.random() * 26;
-    spark.className = 'fx-spark';
-    spark.style.setProperty('--dx', `${Math.round(Math.cos(angle) * reach)}px`);
-    spark.style.setProperty('--dy', `${Math.round(Math.sin(angle) * reach)}px`);
-    layer.append(spark);
-  }
-  host.append(layer);
-  setTimeout(() => layer.remove(), 700);
+// pixelfx 스프라이트 효과(app/fx/*.png, 한 줄 띠). 프레임 수·크기·기준점·재생 시간.
+export const SPRITES = {
+  hit: { frames: 15, w: 128, h: 88, px: 64, py: 72, ms: 1000 },
+  hurt: { frames: 15, w: 128, h: 88, px: 64, py: 72, ms: 1000 },
+  crit: { frames: 15, w: 216, h: 136, px: 84, py: 106, ms: 1000 },
+  poof: { frames: 25, w: 112, h: 92, px: 56, py: 80, ms: 1667 },
+};
+
+// 맞은 자리에서 한 번 재생하고 스스로 지워집니다.
+export function sprite(host, name) {
+  const fx = SPRITES[name];
+  if (!fx || !host?.append || reducedMotion()) return;
+  const el = (host.ownerDocument ?? globalThis.document).createElement('span');
+  el.className = `pfx pfx-${name}`;
+  el.setAttribute('aria-hidden', 'true');
+  for (const [key, value] of Object.entries({ w: fx.w, h: fx.h, px: fx.px, py: fx.py, end: fx.w * fx.frames })) el.style.setProperty(`--${key}`, `${value}px`);
+  el.style.setProperty('--ms', `${fx.ms}ms`);
+  el.style.setProperty('--n', String(fx.frames));
+  el.append((host.ownerDocument ?? globalThis.document).createElement('span'));
+  host.append(el);
+  setTimeout(() => el.remove(), fx.ms + 50);
 }
 
 // 화면 전체가 한 번 번쩍입니다.
@@ -164,11 +164,11 @@ function impact(root, target, critical = false, ko = false) {
   if (!root?.querySelector?.('.battle-screen') || reducedMotion()) return;
   const actor = root.querySelector(target === 'hero' ? '.hero-actor' : '.monster-actor');
   const kind = target === 'hero' ? 'hurt' : critical ? 'crit' : '';
-  burst(actor, critical ? 14 : 8, kind);
+  sprite(actor, target === 'hero' ? 'hurt' : critical ? 'crit' : 'hit');
   flash(root.querySelector('.battle-screen'), kind);
   hitstop(root.querySelector('.sideview-stage'), critical ? 130 : 70);
   jolt(target === 'hero' ? root.ownerDocument?.querySelector('#hero-status') : root.querySelector('.monster-arena .hp-display'));
-  if (ko) setTimeout(() => { if (root.querySelector('.battle-screen')) burst(root.querySelector('.monster-actor'), 12, 'ko'); }, 170);
+  if (ko) setTimeout(() => { if (root.querySelector('.battle-screen')) sprite(root.querySelector('.monster-actor'), 'poof'); }, 170);
 }
 
 // 화면 요소가 없는 테스트 객체는 그대로 흔들고, 실제 화면은 아직 전투 중일 때만 흔듭니다.

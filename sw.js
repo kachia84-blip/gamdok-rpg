@@ -1,5 +1,5 @@
 ﻿importScripts('./fonts/files.js');
-const CACHE_NAME = 'gamdok-v23';
+const CACHE_NAME = 'gamdok-v24';
 const OPTIONAL_FILES = ['./data/monsters.json', './data/story.json', './scenery.css'];
 const FILES = [
   './', './index.html', './style.css', './game.css', './manifest.webmanifest', './icon.svg', './package.json', './sw.js',
@@ -10,6 +10,7 @@ const FILES = [
   './ui/screens/levelup.js', './ui/screens/job.js', './ui/screens/shop.js', './ui/screens/inn.js', './ui/screens/senior.js',
   './ui/screens/skillbook.js', './ui/screens/status.js', './ui/screens/dex.js', './ui/screens/story.js', './ui/screens/article.js',
   './data/cards.json', './data/articles.json', ...OPTIONAL_FILES,
+  './fx/hit.png', './fx/hurt.png', './fx/crit.png', './fx/poof.png',
   './fonts/files.js', ...self.FONT_FILES,
 ];
 

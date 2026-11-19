@@ -68,13 +68,13 @@
 .critical-hit .sideview-stage .monster-emoji{display:inline-block;animation:sideview-crit .52s ease-in-out both}
 .sideview-stage .damage-float{animation-name:damage-pop}
 .sideview-stage .damage-float.critical{animation-name:damage-pop-crit}
-.fx-burst{position:absolute;left:50%;top:50%;width:0;height:0;z-index:5;pointer-events:none}
-.fx-spark{position:absolute;left:-3px;top:-3px;width:6px;height:6px;background:#ffe9a8;border-radius:1px;animation:fx-spark .42s cubic-bezier(.1,.7,.3,1) both}
-.fx-burst.crit .fx-spark,.fx-burst.ko .fx-spark{left:-4px;top:-4px;width:8px;height:8px;background:#fff;animation-duration:.52s}
-.fx-burst.ko .fx-spark{background:#f2c864}
-.fx-burst.hurt .fx-spark{background:#ff8f8f}
-.fx-ring{position:absolute;left:-14px;top:-14px;width:28px;height:28px;border:3px solid #fff3c4;border-radius:50%;animation:fx-ring .36s ease-out both}
-.fx-burst.hurt .fx-ring{border-color:#ff8f8f}
+.pfx{position:absolute;left:50%;top:72%;z-index:5;width:var(--w);height:var(--h);margin:calc(var(--py) * -1) 0 0 calc(var(--px) * -1);overflow:hidden;pointer-events:none}
+.pfx>span{display:block;width:var(--end);height:100%;background:no-repeat 0 0/100% 100%;image-rendering:pixelated;animation:pfx var(--ms) steps(var(--n)) both}
+.pfx-hit>span{background-image:url(fx/hit.png)}
+.pfx-hurt>span{background-image:url(fx/hurt.png)}
+.pfx-crit>span{background-image:url(fx/crit.png)}
+.pfx-poof>span{background-image:url(fx/poof.png)}
+@keyframes pfx{to{transform:translateX(calc(var(--end) * -1))}}
 .fx-flash{position:absolute;inset:0;z-index:9;pointer-events:none;background:#fff;opacity:0;animation:fx-flash .2s ease-out both}
 .fx-flash.crit{animation-duration:.3s;animation-name:fx-flash-strong}
 .fx-flash.hurt{background:#e04848}
@@ -93,8 +93,6 @@
 @keyframes sideview-blade{0%,30%{transform:translateX(-35%) scale(.3);opacity:0}45%{transform:translateX(0) scale(1);opacity:1}100%{transform:translateX(20%) scale(1.1);opacity:0}}
 @keyframes insight-glint{0%{transform:translateY(5px) scale(.4);opacity:0}40%,75%{transform:translateY(-4px) scale(1.15);opacity:1}100%{transform:translateY(-8px) scale(1);opacity:0}}
 @keyframes hero-cheer{0%,100%{transform:translateY(0) rotate(0)}35%{transform:translateY(-10px) rotate(-12deg)}65%{transform:translateY(-4px) rotate(12deg)}}
-@keyframes fx-spark{0%{transform:translate(0,0) scale(1.6);opacity:1}70%{opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0}}
-@keyframes fx-ring{0%{transform:scale(.3);opacity:1}100%{transform:scale(2.6);opacity:0}}
 @keyframes fx-flash{0%{opacity:.42}100%{opacity:0}}
 @keyframes fx-flash-strong{0%{opacity:.75}25%{opacity:.2}40%{opacity:.5}100%{opacity:0}}
 @keyframes fx-jolt{0%,100%{transform:translate(0,0)}20%{transform:translate(-4px,2px)}45%{transform:translate(4px,-2px)}70%{transform:translate(-2px,1px)}}
@@ -105,7 +103,7 @@
 @media(prefers-reduced-motion:reduce){
   .town-player{transition:none}
   .town-player-icon,.sideview-stage *,.critical-hit .sideview-stage,.fx-shake,.fx-shake-strong,.fx-jolt{animation:none!important}
-  .fx-burst,.fx-flash{display:none}
+  .pfx,.fx-flash{display:none}
   .sideview-stage .insight-glint{display:none}
   .defeated .sideview-stage .monster-sprite,.defeated .sideview-stage .monster-shadow{opacity:0}
 }
