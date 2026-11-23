@@ -8,7 +8,8 @@ export function article({ articleNo, articles, explanation = null }) {
     button('닫기', () => dialog.close(), { className: 'secondary', autofocus: true })),
   h('p', { className: 'eyebrow' }, explanation !== null ? articleNo : '산업안전보건기준에 관한 규칙'),
   h('div', { className: 'article-text' }, explanation ?? item?.text ?? '원문 데이터가 없습니다. 잠시 뒤 다시 확인해 주세요.'));
-  dialog.addEventListener('click', event => { if (event.target === dialog) {
+  dialog.setAttribute('closedby', 'any');
+  if (!('closedBy' in HTMLDialogElement.prototype)) dialog.addEventListener('click', event => { if (event.target === dialog) {
     const bounds = dialog.getBoundingClientRect();
     if (event.clientY < bounds.top || event.clientX < bounds.left || event.clientX > bounds.right || event.clientY > bounds.bottom) dialog.close();
   } });
